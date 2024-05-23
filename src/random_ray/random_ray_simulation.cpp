@@ -49,6 +49,9 @@ void openmc_run_random_ray()
 
   // Output all simulation results
   sim.output_simulation_results();
+
+  
+  std::cout << "Random Ray simulation Complete!" << std::endl;
 }
 
 // Enforces restrictions on inputs in random ray mode.  While there are
