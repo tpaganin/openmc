@@ -77,9 +77,14 @@ RandomRay::RandomRay()
 
 RandomRay::RandomRay(uint64_t ray_id, FlatSourceDomain* domain) : RandomRay()
 {
+  if(settings::run_mode == RunMode::FIRST_COLLIDED_FLUX){
+  //initialize_ray_first_collided(ray_id, domain);
+  fmt::print("test this");
+  }
+  else{
   initialize_ray(ray_id, domain);
+  }
 }
-
 // Transports ray until termination criteria are met
 uint64_t RandomRay::transport_history_based_single_ray()
 {

@@ -334,6 +334,7 @@ enum class Interpolation {
 enum class RunMode {
   UNSET, // default value, OpenMC throws error if left to this
   FIXED_SOURCE,
+  FIRST_COLLIDED_FLUX,
   EIGENVALUE,
   PLOTTING,
   PARTICLE,

@@ -247,6 +247,9 @@ int64_t FlatSourceDomain::add_source_to_scalar_flux()
         float sigma_t = data::mg.macro_xs_[material].get_xs(
           MgxsType::TOTAL, g, nullptr, nullptr, nullptr, t, a);
         scalar_flux_new_[idx] /= (sigma_t * volume);
+        if(settings::run_mode == RunMode::FIRST_COLLIDED_FLUX){
+           fixed_source_[idx] += scalar_flux_new_[idx];
+        }
         scalar_flux_new_[idx] += source_[idx];
       } else if (volume > 0.0) {
         // 2. If the FSR was not hit this iteration, but has been hit some
@@ -259,6 +262,7 @@ int64_t FlatSourceDomain::add_source_to_scalar_flux()
         // to avoid dividing anything by a zero volume.
         scalar_flux_new_[idx] = 0.0f;
       }
+      // add SOURCE To fixed_source_ here (TOMAS)
     }
   }
 

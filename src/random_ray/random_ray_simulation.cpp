@@ -249,7 +249,15 @@ void RandomRaySimulation::simulate()
     domain_.convert_fixed_sources();
     domain_.count_fixed_source_regions();
   }
-
+  else if (settings::run_mode == RunMode::FIRST_COLLIDED_FLUX){
+    // ADD routine for first collided source
+    fmt::print("FIRST COLLIDED FLUX IS ACTIVE");
+    // FIRST_COLLIDED_FLUX calculation routine:
+    
+    //I believe I can use:
+    domain_.convert_fixed_sources();
+    domain_.count_fixed_source_regions();
+  }
   // Random ray power iteration loop
   while (simulation::current_batch < settings::n_batches) {
 

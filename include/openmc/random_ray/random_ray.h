@@ -27,6 +27,10 @@ public:
   void attenuate_flux(double distance, bool is_active);
   void initialize_ray(uint64_t ray_id, FlatSourceDomain* domain);
   uint64_t transport_history_based_single_ray();
+  //void event_advance_ray_first_collided();
+  //void attenuate_flux_first_collided(double distance, bool is_active);
+  //void initialize_ray_first_collided(uint64_t ray_id, FlatSourceDomain* domain);
+  //uint64_t transport_history_based_single_ray_first_collided();
 
   //----------------------------------------------------------------------------
   // Static data members
