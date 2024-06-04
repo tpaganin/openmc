@@ -17,6 +17,8 @@
 
 namespace openmc {
 
+//global variable 
+   bool fixed_source_cond_ = false;
 //==============================================================================
 // FlatSourceDomain implementation
 //==============================================================================
@@ -52,6 +54,13 @@ FlatSourceDomain::FlatSourceDomain() : negroups_(data::mg.num_energy_groups_)
   scalar_flux_final_.assign(n_source_elements_, 0.0);
   source_.resize(n_source_elements_);
   tally_task_.resize(n_source_elements_);
+  // (TOMAS) Reseting Sources and initial fluxes
+  if(fixed_source_cond_){
+    fixed_source_.resize(n_source_elements_);
+    scalar_flux_old_.assign(n_source_elements_, 0.0);
+    source_.assign(n_source_elements_, 0.0);
+    fixed_source_.assign(n_source_elements_, 0.0);
+  }
 
   // Initialize material array
   int64_t source_region_id = 0;
@@ -79,6 +88,8 @@ void FlatSourceDomain::batch_reset()
   parallel_fill<int>(was_hit_, 0);
 }
 
+// (TOMAS)
+//  ADD UNCOLLIDED FLUX HERE - TBD
 void FlatSourceDomain::accumulate_iteration_flux()
 {
 #pragma omp parallel for
@@ -120,8 +131,8 @@ void FlatSourceDomain::update_neutron_source(double k_eff)
           MgxsType::NU_FISSION, e_in, nullptr, nullptr, nullptr, t, a);
         float chi = data::mg.macro_xs_[material].get_xs(
           MgxsType::CHI_PROMPT, e_in, &e_out, nullptr, nullptr, t, a);
-        scatter_source += sigma_s * scalar_flux;
-        fission_source += nu_sigma_f * scalar_flux * chi;
+        scatter_source += sigma_s * (scalar_flux ); // + fixed_source_[sr * negroups_ + e_in]
+        fission_source += nu_sigma_f * (scalar_flux ) * chi; // + fixed_source_[sr * negroups_ + e_in]
       }
 
       fission_source *= inverse_k_eff;
@@ -206,7 +217,14 @@ int64_t FlatSourceDomain::add_source_to_scalar_flux()
       }
     }
   }
-
+   // if(fixed_source_cond_){
+   //   for (int sr = 0; sr < n_source_regions_; sr++) {
+   //     for (int g = 0; g < negroups_; g++) {
+   //       int64_t idx = (sr * negroups_) + g;
+   //       fixed_source_[idx] += scalar_flux_new_[idx];
+   //   }  
+   // }
+  //}
   // Return the number of source regions that were hit this iteration
   return n_hits;
 }

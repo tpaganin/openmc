@@ -115,7 +115,7 @@ void validate_random_ray_inputs()
   ///////////////////////////////////////////////////////////////////
   if (settings::run_mode == RunMode::FIXED_SOURCE) {
     fatal_error(
-      "Invalid run mode. Fixed source not yet supported in random ray mode.");
+    "Invalid run mode. Fixed source not yet supported in random ray mode.");
   }
 
   // Validate ray source
@@ -208,7 +208,52 @@ RandomRaySimulation::RandomRaySimulation()
 
 void RandomRaySimulation::simulate()
 {
-  // Random ray power iteration loop
+  if(fixed_source_cond_){
+    fmt::print("First Collided Flux Condition in operation");
+    initialize_batch();
+    initialize_generation();
+
+    // Reset total starting particle weight used for normalizing tallies
+    simulation::total_weight = 1.0;
+
+    // Update source term (scattering + fission)
+    domain_.update_neutron_source(k_eff_);
+
+    // Reset scalar fluxes, iteration volume tallies, and region hit flags to
+    // zero
+    domain_.batch_reset();
+
+    // Start timer for transport
+    simulation::time_transport.start();
+
+// Transport sweep over all random rays for the iteration
+#pragma omp parallel for schedule(dynamic)                                     \
+  reduction(+ : total_geometric_intersections_)
+    for (int i = 0; i < simulation::work_per_rank; i++) {
+      RandomRay ray(i, &domain_);
+      total_geometric_intersections_ +=
+        ray.transport_history_based_single_ray_first_collided();
+    }
+
+    simulation::time_transport.stop();
+
+  // If using multiple MPI ranks, perform all reduce on all transport results
+    domain_.all_reduce_replicated_source_regions();
+
+  // Normalize scalar flux and update volumes
+    domain_.normalize_scalar_flux_and_volumes(
+      settings::n_particles * RandomRay::distance_active_);
+
+  // Add source to scalar flux, compute number of FSR hits
+    int64_t n_hits = domain_.add_source_to_scalar_flux();
+
+    // Set phi_old = phi_new
+    domain_.scalar_flux_old_.swap(domain_.scalar_flux_new_);
+
+    // Finalize the current batch
+    finalize_generation();
+    finalize_batch();
+  }
   while (simulation::current_batch < settings::n_batches) {
 
     // Initialize the current batch
@@ -368,6 +413,8 @@ void RandomRaySimulation::print_results_random_ray(
       " Total Integrations                = {:.4e}\n", total_integrations);
     fmt::print("   Avg per Iteration               = {:.4e}\n",
       total_integrations / settings::n_batches);
+      // (TOMAS)
+      fmt::print("First Collided Flux Condition           = {}\n", fixed_source_cond_);
 
     header("Timing Statistics", 4);
     show_time("Total time for initialization", time_initialize.elapsed());

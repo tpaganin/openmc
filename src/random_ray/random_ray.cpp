@@ -93,6 +93,183 @@ uint64_t RandomRay::transport_history_based_single_ray()
 
   return n_event();
 }
+// (TOMAS)
+uint64_t RandomRay::transport_history_based_single_ray_first_collided()
+{
+  using namespace openmc;
+    while (alive()) {
+      event_advance_ray_first_collided_flux();
+  if (!alive())
+      break;
+    event_cross_surface();
+  }
+ return n_event();
+}
+
+// Transports ray across single source region - First collided flux
+void RandomRay::event_advance_ray_first_collided_flux()
+{
+  // Find the distance to the nearest boundary
+  boundary() = distance_to_boundary(*this);
+  double distance = boundary().distance;
+
+ if (distance <= 0.0) {
+    mark_as_lost("Negative transport distance detected for particle " +
+                 std::to_string(id()));
+    return;
+  }
+
+  distance_travelled_ += distance;
+  distance_active_ = distance_travelled_;
+  attenuate_flux_first_collided_flux(distance);
+
+
+  // Advance particle
+  for (int j = 0; j < n_coord(); ++j) {
+    coord(j).r += distance * coord(j).u;
+  }
+
+}
+// (Tomas) Fixed source flux attenuation
+void RandomRay::attenuate_flux_first_collided_flux(double distance)
+{
+  // The number of geometric intersections is counted for reporting purposes
+  n_event()++;
+
+  // Determine source region index etc.
+  int i_cell = lowest_coord().cell;
+
+  // The source region is the spatial region index
+  int64_t source_region =
+    domain_->source_region_offsets_[i_cell] + cell_instance();
+
+  // The source element is the energy-specific region index
+  int64_t source_element = source_region * negroups_;
+  int material = this->material();
+
+  // Temperature and angle indices, if using multiple temperature
+  // data sets and/or anisotropic data sets.
+  // TODO: Currently assumes we are only using single temp/single
+  // angle data.
+  const int t = 0;
+  const int a = 0;
+  float norm_flux_fixed_source;
+  float stop_criteria_fixed_source = 0.000001;
+  float square_flux = 0;
+
+  // MOC incoming flux attenuation
+  for (int g = 0; g < negroups_; g++) {
+    float sigma_t = data::mg.macro_xs_[material].get_xs(
+      MgxsType::TOTAL, g, NULL, NULL, NULL, t, a);
+    float tau = sigma_t * distance;
+    float exponential = cjosey_exponential(tau); // exponential = 1 - exp(-tau)
+    float new_delta_psi = (angular_flux_[g]) * exponential;
+    delta_psi_[g] = new_delta_psi;
+    angular_flux_[g] -= new_delta_psi;
+    square_flux += angular_flux_[g] * angular_flux_[g];  
+  }
+
+  norm_flux_fixed_source = sqrt(square_flux);
+  //am I cutting the last cell off?
+  if (stop_criteria_fixed_source >= norm_flux_fixed_source){
+    wgt() = 0.0;
+  }
+
+  // Make contributions to source region bookkeeping
+  // (TOMAS)This bookkeeping should be Different from regular
+  // source bookkeping because it is used in all baches/iterations.
+    
+  // Aquire lock for source region
+  //(TOMAS) - FIXED SOURCE MIGHT GENERATE AN EFFICIENCY PROBLEM HERE 
+    domain_->lock_[source_region].lock();
+
+    // Accumulate delta psi into new estimate of source region flux for
+    // this iteration
+    //(TOMAS SHOULD I CALL THIS ANOTHER VARIABLE?) 
+    // DO NOT MIX WITH REGULAR SCALAR_FLUX_NEW
+    for (int g = 0; g < negroups_; g++) {
+      domain_->scalar_flux_new_[source_element + g] += delta_psi_[g];
+    }
+
+    // If the source region hasn't been hit yet this iteration,
+    // indicate that it now has
+    if (domain_->was_hit_[source_region] == 0) {
+      domain_->was_hit_[source_region] = 1;
+    }
+
+    // Accomulate volume (ray distance) into this iteration's estimate
+    // of the source region's volume
+    domain_->volume_[source_region] += distance;
+
+    // Tally valid position inside the source region (e.g., midpoint of
+    // the ray) if not done already
+    if (!domain_->position_recorded_[source_region]) {
+      Position midpoint = r() + u() * (distance / 2.0);
+      domain_->position_[source_region] = midpoint;
+      domain_->position_recorded_[source_region] = 1;
+    }
+
+    // Release lock
+    domain_->lock_[source_region].unlock();
+  }
+
+// Initiate_ray based on fixed source input
+void RandomRay::initialize_ray_first_collided_flux(uint64_t ray_id, FlatSourceDomain* domain)
+{
+  domain_ = domain;
+
+  // Reset particle event counter
+  n_event() = 0;
+
+ // (TOMAS) I don't think this part is necessary
+ // is_active_ = (distance_inactive_ <= 0.0);
+
+  wgt() = 1.0;
+
+  // set identifier for particle
+  id() = simulation::work_index[mpi::rank] + ray_id;
+
+  // set random number seed
+  int64_t particle_seed =
+    (simulation::current_batch - 1) * settings::n_particles + id();
+  init_particle_seeds(particle_seed, seeds());
+  stream() = STREAM_TRACKING;
+
+  // (TOMAS) import that from input
+  // Sample from ray source distribution
+  // DO I NEED THIS? //initialize_source();
+  // FOR SURE FIX THIS TO ACCOUNT NEW SOURCES INPUT
+  //uint64_t place_holder = 1;
+  SourceSite site {ray_source_->sample(current_seed())};//&place_holder)};
+  //SourceSite site {ray_source_->sample(current_seed())};
+  site.E = lower_bound_index(
+    data::mg.rev_energy_bins_.begin(), data::mg.rev_energy_bins_.end(), site.E);
+  site.E = negroups_ - site.E - 1.;
+  this->from_source(&site);
+
+  // Locate ray
+  if (lowest_coord().cell == C_NONE) {
+    if (!exhaustive_find_cell(*this)) {
+      this->mark_as_lost(
+        "Could not find the cell containing particle " + std::to_string(id()));
+    }
+
+    // Set birth cell attribute
+    if (cell_born() == C_NONE)
+      cell_born() = lowest_coord().cell;
+  }
+
+  // Initialize ray's starting angular flux to starting location's isotropic
+  // source
+  int i_cell = lowest_coord().cell;
+  int64_t source_region_idx =
+    domain_->source_region_offsets_[i_cell] + cell_instance();
+
+  for (int g = 0; g < negroups_; g++) {
+    angular_flux_[g] = domain_->fixed_source_[source_region_idx * negroups_ + g];
+  }
+}
+
 
 // Transports ray across a single source region
 void RandomRay::event_advance_ray()

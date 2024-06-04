@@ -11,6 +11,9 @@ namespace openmc {
  * scalar flux and source region for all flat source regions in a
  * random ray simulation domain.
  */
+//global variable 
+  extern bool fixed_source_cond_;
+
 
 class FlatSourceDomain {
 public:
@@ -72,6 +75,8 @@ public:
   vector<float> scalar_flux_old_;
   vector<float> scalar_flux_new_;
   vector<float> source_;
+  vector<float> fixed_source_;
+  //vector<float> uncollided_scalar_flux;
 
   //----------------------------------------------------------------------------
   // Private data members

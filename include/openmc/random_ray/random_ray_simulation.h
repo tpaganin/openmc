@@ -45,6 +45,8 @@ private:
   // Number of energy groups
   int negroups_;
 
+  bool fixed_source_tets_ = false;
+  bool fixed_source_cond_ = false;
 }; // class RandomRaySimulation
 
 //============================================================================

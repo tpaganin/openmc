@@ -235,11 +235,11 @@ private:
 //! Initialize source bank from file/distribution
 extern "C" void initialize_source();
 
-//! Sample a site from all external source distributions in proportion to their
-//! source strength
-//! \param[inout] seed Pseudorandom seed pointer
-//! \return Sampled source site
-SourceSite sample_external_source(uint64_t* seed);
+  //! Sample a site from all external source distributions in proportion to their
+  //! source strength
+  //! \param[inout] seed Pseudorandom seed pointer
+  //! \return Sampled source site
+  SourceSite sample_external_source(uint64_t* seed);
 
 void free_memory_source();
 
