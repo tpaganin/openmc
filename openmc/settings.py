@@ -24,6 +24,7 @@ class RunMode(Enum):
     PLOT = 'plot'
     VOLUME = 'volume'
     PARTICLE_RESTART = 'particle restart'
+    FIRST_COLLIDED_FLUX = 'first collided'
 
 
 _RES_SCAT_METHODS = ['dbrc', 'rvs']

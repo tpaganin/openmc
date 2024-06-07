@@ -175,8 +175,10 @@ void validate_random_ray_inputs()
 
       // Validate that a domain ID was specified
       if (is->domain_ids().size() == 0) {
+        if(settings::FIRST_COLLIDED_FLUX == false){
         fatal_error("Fixed sources must be specified by domain "
                     "id (cell, material, or universe) in random ray mode.");
+        }
       }
 
       // Check that a discrete energy distribution was used
@@ -246,17 +248,40 @@ void RandomRaySimulation::simulate()
 {
   if (settings::run_mode == RunMode::FIXED_SOURCE) {
     // Transfer fixed source user inputs onto random ray source regions
+    if (settings::FIRST_COLLIDED_FLUX == false){
     domain_.convert_fixed_sources();
     domain_.count_fixed_source_regions();
-  }
-  else if (settings::run_mode == RunMode::FIRST_COLLIDED_FLUX){
+    } else {
     // ADD routine for first collided source
-    fmt::print("FIRST COLLIDED FLUX IS ACTIVE");
+    fmt::print("FIRST COLLIDED FLUX IS ACTIVE \n");
     // FIRST_COLLIDED_FLUX calculation routine:
+
+    // Transport sweep over all random rays for the iteration
+//#pragma omp parallel for schedule(dynamic)                                     \
+  reduction(+ : total_geometric_intersections_)
+    //for (int i = 0; i < simulation::work_per_rank; i++) {
+      for (int i =0; i< settings::n_uncollided_rays; i++){
+      RandomRay ray(i, &domain_);
+      total_geometric_intersections_ +=
+        ray.transport_history_based_single_ray_first_collided();
+    }
     
-    //I believe I can use:
-    domain_.convert_fixed_sources();
-    domain_.count_fixed_source_regions();
+    //(TOMAS) Do I need this?
+    // If using multiple MPI ranks, perform all reduce on all transport results
+    //domain_.all_reduce_replicated_source_regions();
+
+    // Normalize scalar flux and update volumes
+    domain_.normalize_scalar_flux_and_volumes(
+    settings::n_particles * RandomRay::distance_active_);
+
+    // Add source to scalar flux, compute number of FSR hits
+    int64_t n_hits = domain_.add_source_to_scalar_flux();
+
+    // Add this iteration's scalar flux estimate to final accumulated estimate
+    domain_.accumulate_iteration_flux();
+
+    settings::FIRST_COLLIDED_FLUX = {false};
+    }
   }
   // Random ray power iteration loop
   while (simulation::current_batch < settings::n_batches) {

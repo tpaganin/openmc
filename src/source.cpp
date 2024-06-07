@@ -622,17 +622,21 @@ SourceSite sample_external_source(uint64_t* seed)
       if (xi < c)
         break;
     }
+
   }
+
 
   // Sample source site from i-th source distribution
   SourceSite site {model::external_sources[i]->sample_with_constraints(seed)};
-
-  // If running in MG, convert site.E to group
+  site.source_id = i;
+// If running in MG, convert site.E to group
   if (!settings::run_CE) {
     site.E = lower_bound_index(data::mg.rev_energy_bins_.begin(),
       data::mg.rev_energy_bins_.end(), site.E);
     site.E = data::mg.num_energy_groups_ - site.E - 1.;
   }
+
+
 
   return site;
 }

@@ -77,13 +77,7 @@ RandomRay::RandomRay()
 
 RandomRay::RandomRay(uint64_t ray_id, FlatSourceDomain* domain) : RandomRay()
 {
-  if(settings::run_mode == RunMode::FIRST_COLLIDED_FLUX){
-  //initialize_ray_first_collided(ray_id, domain);
-  fmt::print("test this");
-  }
-  else{
   initialize_ray(ray_id, domain);
-  }
 }
 // Transports ray until termination criteria are met
 uint64_t RandomRay::transport_history_based_single_ray()
@@ -98,7 +92,44 @@ uint64_t RandomRay::transport_history_based_single_ray()
 
   return n_event();
 }
+// Transports uncollided ray until termination criteria are met
+uint64_t RandomRay::transport_history_based_single_ray_first_collided()
+{
+  using namespace openmc;
+  while (alive()) {
+    event_advance_ray_first_collided();
+    if (!alive())
+      break;
+    event_cross_surface();
+  }
 
+  return n_event();
+}
+
+// Transports uncollided ray across a single region.
+void RandomRay::event_advance_ray_first_collided()
+{
+  // Find the distance to the nearest boundary
+  boundary() = distance_to_boundary(*this);
+  double distance = boundary().distance;
+
+ if (distance <= 0.0) {
+    mark_as_lost("Negative transport distance detected for particle " +
+                 std::to_string(id()));
+    return;
+  }
+  // For Uncollided/First Collided Flux, it is calculated the attenuation
+  // as the ray advance through the region and a check if the outcoming 
+  // flux reaches the defined threshold.
+    distance_travelled_ += distance;
+    attenuate_flux(distance, true);
+
+  // Advance particle
+  for (int j = 0; j < n_coord(); ++j) {
+    coord(j).r += distance * coord(j).u;
+  }
+
+}
 // Transports ray across a single source region
 void RandomRay::event_advance_ray()
 {
@@ -157,6 +188,7 @@ void RandomRay::event_advance_ray()
   }
 }
 
+
 // This function forms the inner loop of the random ray transport process.
 // It is responsible for several tasks. Based on the incoming angular flux
 // of the ray and the source term in the region, the outgoing angular flux
@@ -192,18 +224,26 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
   // angle data.
   const int t = 0;
   const int a = 0;
-
+  float new_delta_psi;
+  
   // MOC incoming flux attenuation + source contribution/attenuation equation
   for (int g = 0; g < negroups_; g++) {
     float sigma_t = data::mg.macro_xs_[material].get_xs(
       MgxsType::TOTAL, g, NULL, NULL, NULL, t, a);
     float tau = sigma_t * distance;
     float exponential = cjosey_exponential(tau); // exponential = 1 - exp(-tau)
-    float new_delta_psi =
+    if(settings::FIRST_COLLIDED_FLUX){
+      new_delta_psi = (angular_flux_[g]) * exponential;
+    }
+    else{
+      new_delta_psi =
       (angular_flux_[g] - domain_->source_[source_element + g]) * exponential;
+    }
     delta_psi_[g] = new_delta_psi;
     angular_flux_[g] -= new_delta_psi;
+
   }
+
 
   // If ray is in the active phase (not in dead zone), make contributions to
   // source region bookkeeping
@@ -238,7 +278,29 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
 
     // Release lock
     domain_->lock_[source_region].unlock();
+
+    // check attenuation in FIRST_ COLLIDED_FLUX
+    if (settings::FIRST_COLLIDED_FLUX){
+      bool angular_flux_below_threshold = true;
+    for (int g = 0; g < negroups_; g++) {
+      fmt::print("Angular_flux = {:.6f} \n", angular_flux_[g]);
+        if (angular_flux_[g] == 0) {
+            std::cerr << "Zero Flux." << std::endl;
+        } else {
+        float ratio = angular_flux_[g];
+          if (ratio >= settings::ray_threshold) {
+            angular_flux_below_threshold = false;
+            break;
+          }
+        }
+      }
+      if (angular_flux_below_threshold){
+        wgt() = 0.0;
+      }
+    }
   }
+
+  
 }
 
 void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
@@ -253,20 +315,66 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
   wgt() = 1.0;
 
   // set identifier for particle
-  id() = simulation::work_index[mpi::rank] + ray_id;
-
+  if (settings::FIRST_COLLIDED_FLUX){
+    id() = ray_id;
+    simulation::current_batch = 1;
+  } else {
+    id() = simulation::work_index[mpi::rank] + ray_id;
+  }
   // set random number seed
   int64_t particle_seed =
     (simulation::current_batch - 1) * settings::n_particles + id();
   init_particle_seeds(particle_seed, seeds());
   stream() = STREAM_TRACKING;
 
-  // Sample from ray source distribution
-  SourceSite site {ray_source_->sample(current_seed())};
-  site.E = lower_bound_index(
+  // Sample from input Source
+  if (settings::FIRST_COLLIDED_FLUX){
+    auto site = sample_external_source(current_seed());
+    site.E = lower_bound_index(
     data::mg.rev_energy_bins_.begin(), data::mg.rev_energy_bins_.end(), site.E);
-  site.E = negroups_ - site.E - 1.;
-  this->from_source(&site);
+    site.E = negroups_ - site.E - 1.;
+    //this->from_source(&site);
+    from_source(&site);
+
+    //Source* source_handle = model::external_sources[site.source_id];
+    // Check for independent source
+    //IndependentSource* is = dynamic_cast<IndependentSource*>(source_handle);
+
+    std::unique_ptr<openmc::Source>& source_handle = model::external_sources[site.source_id];
+    // Check for independent source
+    IndependentSource* is = dynamic_cast<IndependentSource*>(source_handle.get());
+    if(is == nullptr){
+      fmt::print("nullptr - souce_handle.get\n");
+    }
+    if (is != nullptr) { // Ensure the cast was successful
+    Distribution* energy_dist = is->energy();
+    Discrete* disc = dynamic_cast<Discrete*>(energy_dist);
+        if(disc == nullptr){
+      fmt::print("nullptr - disc\n");
+    }
+    if (disc != nullptr) {
+    const auto& discrete_energies = disc->x();
+    const auto& discrete_probs = disc->prob();
+   
+      for (int g = 0; g < negroups_; g++) {
+        // Set angular flux spectrum equal to source spectrum
+        angular_flux_[g] = discrete_probs[g];
+        fmt::print("angular_flux_ = {:.1f}\n", angular_flux_[g]);
+        //angular_flux_initial_[g] = angular_flux_[g];
+       // angular_flux_[g] = domain_->source_[source_region_idx * negroups_ + g];
+      }
+     }
+    }
+    
+  }
+  else {
+    // Sample from ray source distribution
+    SourceSite site {ray_source_->sample(current_seed())};
+    site.E = lower_bound_index(
+    data::mg.rev_energy_bins_.begin(), data::mg.rev_energy_bins_.end(), site.E);
+    site.E = negroups_ - site.E - 1.;
+    this->from_source(&site);
+  }
 
   // Locate ray
   if (lowest_coord().cell == C_NONE) {
@@ -280,14 +388,17 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
       cell_born() = lowest_coord().cell;
   }
 
-  // Initialize ray's starting angular flux to starting location's isotropic
-  // source
-  int i_cell = lowest_coord().cell;
-  int64_t source_region_idx =
+  // initialize ray's starting angular flux spectrum
+ if(settings::run_mode == RunMode::EIGENVALUE){
+    // Initialize ray's starting angular flux to starting location's isotropic
+    // source
+    int i_cell = lowest_coord().cell;
+    int64_t source_region_idx =
     domain_->source_region_offsets_[i_cell] + cell_instance();
 
-  for (int g = 0; g < negroups_; g++) {
+    for (int g = 0; g < negroups_; g++) {
     angular_flux_[g] = domain_->source_[source_region_idx * negroups_ + g];
+    }
   }
 }
 

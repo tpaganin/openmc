@@ -131,6 +131,10 @@ int trigger_batch_interval {1};
 int verbosity {7};
 double weight_cutoff {0.25};
 double weight_survive {1.0};
+  // HARDCODED INPUTS - First Collided Flux
+float ray_threshold {1e-6f};
+bool FIRST_COLLIDED_FLUX {true};
+int n_uncollided_rays {1000};
 
 } // namespace settings
 
@@ -191,7 +195,7 @@ void get_run_parameters(pugi::xml_node node_base)
   }
 
   // Get number of inactive batches
-  if (run_mode == RunMode::EIGENVALUE ||
+  if (run_mode == RunMode::EIGENVALUE || run_mode == RunMode::FIRST_COLLIDED_FLUX ||
       solver_type == SolverType::RANDOM_RAY) {
     if (check_for_node(node_base, "inactive")) {
       n_inactive = std::stoi(get_node_value(node_base, "inactive"));
@@ -400,6 +404,8 @@ void read_settings_xml(pugi::xml_node root)
         run_mode = RunMode::PARTICLE;
       } else if (temp_str == "volume") {
         run_mode = RunMode::VOLUME;
+      } else if (temp_str == "first collided"){
+        run_mode = RunMode::FIRST_COLLIDED_FLUX;
       } else {
         fatal_error("Unrecognized run mode: " + temp_str);
       }
@@ -412,16 +418,21 @@ void read_settings_xml(pugi::xml_node root)
       // Make sure that either eigenvalue or fixed source was specified
       node_mode = root.child("eigenvalue");
       if (node_mode) {
-        run_mode = RunMode::EIGENVALUE;
+      run_mode = RunMode::EIGENVALUE;
       } else {
         node_mode = root.child("fixed_source");
         if (node_mode) {
-          run_mode = RunMode::FIXED_SOURCE;
+        run_mode = RunMode::FIXED_SOURCE;
+        } else {
+        node_mode = root.child("first_collided_flux");
+        if (node_mode) {
+        run_mode = RunMode::FIRST_COLLIDED_FLUX;
         } else {
           fatal_error("<eigenvalue> or <fixed_source> not specified.");
         }
       }
     }
+  }
   }
 
   // Check solver type
@@ -432,7 +443,7 @@ void read_settings_xml(pugi::xml_node root)
                   "when using the random ray solver.");
   }
 
-  if (run_mode == RunMode::EIGENVALUE || run_mode == RunMode::FIXED_SOURCE) {
+  if (run_mode == RunMode::EIGENVALUE || run_mode == RunMode::FIXED_SOURCE || run_mode == RunMode::FIRST_COLLIDED_FLUX) {
     // Read run parameters
     get_run_parameters(node_mode);
 
