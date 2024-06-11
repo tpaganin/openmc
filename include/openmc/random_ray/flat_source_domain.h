@@ -115,6 +115,7 @@ public:
     Discrete* discrete, double strength_factor, int32_t target_material_id);
   void convert_fixed_sources();
   void count_fixed_source_regions();
+  void add_uncollided_flux();
 
   //----------------------------------------------------------------------------
   // Public Data members
@@ -142,7 +143,7 @@ public:
   vector<float> scalar_flux_new_;
   vector<float> source_;
   vector<float> fixed_source_;
-
+  vector<float> scalar_uncollided_flux_;
   //----------------------------------------------------------------------------
   // Private data members
 private:

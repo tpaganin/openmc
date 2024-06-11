@@ -13,6 +13,7 @@ namespace openmc {
  * through the model. It is a small extension of the Particle class.
  */
 
+
 // TODO: Inherit from GeometryState instead of Particle
 class RandomRay : public Particle {
 public:
@@ -29,18 +30,19 @@ public:
   uint64_t transport_history_based_single_ray();
   void event_advance_ray_first_collided();
   uint64_t transport_history_based_single_ray_first_collided();
-
+  
   //----------------------------------------------------------------------------
   // Static data members
   static double distance_inactive_;      // Inactive (dead zone) ray length
   static double distance_active_;        // Active ray length
   static unique_ptr<Source> ray_source_; // Starting source for ray sampling
-
+  static double total_travelled_distance_;
   //----------------------------------------------------------------------------
   // Public data members
   vector<float> angular_flux_;
   vector<float> angular_flux_initial_;
-
+  vector<float> angular_uncollided_flux_;
+  
 private:
   //----------------------------------------------------------------------------
   // Private data members

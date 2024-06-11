@@ -50,8 +50,9 @@ FlatSourceDomain::FlatSourceDomain() : negroups_(data::mg.num_energy_groups_)
   // Initialize element-wise arrays
   scalar_flux_new_.assign(n_source_elements_, 0.0);
   scalar_flux_final_.assign(n_source_elements_, 0.0);
+  scalar_uncollided_flux_.assign(n_source_elements_,0.0);
   source_.resize(n_source_elements_);
-  fixed_source_.assign(n_source_elements_, 0.0);
+  fixed_source_.resize(n_source_elements_);
   tally_task_.resize(n_source_elements_);
   volume_task_.resize(n_source_regions_);
 
@@ -202,6 +203,13 @@ void FlatSourceDomain::normalize_scalar_flux_and_volumes(
     scalar_flux_new_[e] *= normalization_factor;
   }
 
+// Normalize scalar uncollided flux to number of rays generated in Uncollided flux mode
+if (settings::FIRST_COLLIDED_FLUX){
+#pragma omp parallel for
+  for (int64_t i = 0; i < scalar_uncollided_flux_.size(); i++) {
+    scalar_uncollided_flux_[i] *= normalization_factor;
+  }
+}
 // Accumulate cell-wise ray length tallies collected this iteration, then
 // update the simulation-averaged cell-wise volume estimates
 #pragma omp parallel for
@@ -247,7 +255,7 @@ int64_t FlatSourceDomain::add_source_to_scalar_flux()
         float sigma_t = data::mg.macro_xs_[material].get_xs(
           MgxsType::TOTAL, g, nullptr, nullptr, nullptr, t, a);
         scalar_flux_new_[idx] /= (sigma_t * volume);
-        if(settings::run_mode == RunMode::FIRST_COLLIDED_FLUX){
+        if(settings::FIRST_COLLIDED_FLUX){
            fixed_source_[idx] += scalar_flux_new_[idx];
         }
         scalar_flux_new_[idx] += source_[idx];
@@ -261,8 +269,10 @@ int64_t FlatSourceDomain::add_source_to_scalar_flux()
         // any iteration (i.e., volume is zero), then we want to set this to 0
         // to avoid dividing anything by a zero volume.
         scalar_flux_new_[idx] = 0.0f;
+        if(settings::FIRST_COLLIDED_FLUX){
+        fixed_source_[idx] = 0.0f;
+        }
       }
-      // add SOURCE To fixed_source_ here (TOMAS)
     }
   }
 
@@ -315,6 +325,16 @@ double FlatSourceDomain::compute_k_eff(double k_eff_old) const
   return k_eff_new;
 }
 
+
+void FlatSourceDomain::add_uncollided_flux()
+{
+  #pragma omp parallel for
+  for (int sr = 0; sr < n_source_regions_; sr++) {
+    for (int g = 0; g < negroups_; g++) {
+    scalar_flux_final_[sr * negroups_ + g] += (scalar_uncollided_flux_[sr * negroups_ + g] / volume_[sr]);
+    }
+  }
+}
 // This function is responsible for generating a mapping between random
 // ray flat source regions (cell instances) and tally bins. The mapping
 // takes the form of a "TallyTask" object, which accounts for one single
@@ -804,7 +824,16 @@ void FlatSourceDomain::output_to_vtk() const
       total_fission = convert_to_big_endian<float>(total_fission);
       std::fwrite(&total_fission, sizeof(float), 1, plot);
     }
-
+    
+    // Plot fixed source
+    std::fprintf(plot, "SCALARS fixed_source int\n");
+    std::fprintf(plot, "LOOKUP_TABLE default\n");
+    for (int fsr : voxel_indices) {
+        float fsf = fixed_source_[fsr] / settings::n_uncollided_rays;
+        fsf = convert_to_big_endian<float>(fsf);
+        std::fwrite(&fsf, sizeof(float), 1, plot);
+    }
+  
     std::fclose(plot);
   }
 }

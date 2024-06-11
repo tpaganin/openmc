@@ -236,8 +236,8 @@ def create_random_ray_model():
     # Instantiate a Settings object, set all runtime parameters, and export to XML
     settings = openmc.Settings()
     settings.energy_mode = "multi-group"
-    settings.batches = 200
-    settings.inactive = 100
+    settings.batches = 100
+    settings.inactive = 40
     settings.particles = 10000
     settings.run_mode = 'fixed source'
     settings.random_ray['distance_active'] = 400.0

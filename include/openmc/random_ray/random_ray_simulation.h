@@ -29,6 +29,9 @@ public:
 
   //----------------------------------------------------------------------------
   // Data members
+  // First_collided_flux_marker for the uncollided flux addition
+  bool uncollided_flux_add_ {false};
+
 private:
   // Contains all flat source region data
   FlatSourceDomain domain_;
@@ -45,6 +48,8 @@ private:
 
   // Number of energy groups
   int negroups_;
+
+
 
 }; // class RandomRaySimulation
 

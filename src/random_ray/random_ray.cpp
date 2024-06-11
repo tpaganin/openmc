@@ -68,11 +68,15 @@ float cjosey_exponential(float tau)
 double RandomRay::distance_inactive_;
 double RandomRay::distance_active_;
 unique_ptr<Source> RandomRay::ray_source_;
+//double RandomRay::total_distance_track_;
+double RandomRay::total_travelled_distance_;
 
 RandomRay::RandomRay()
   : angular_flux_(data::mg.num_energy_groups_),
     delta_psi_(data::mg.num_energy_groups_),
-    negroups_(data::mg.num_energy_groups_)
+    negroups_(data::mg.num_energy_groups_),
+    angular_flux_initial_(data::mg.num_energy_groups_),
+    angular_uncollided_flux_(data::mg.num_energy_groups_)
 {}
 
 RandomRay::RandomRay(uint64_t ray_id, FlatSourceDomain* domain) : RandomRay()
@@ -102,7 +106,7 @@ uint64_t RandomRay::transport_history_based_single_ray_first_collided()
       break;
     event_cross_surface();
   }
-
+  total_travelled_distance_ += distance_travelled_;
   return n_event();
 }
 
@@ -128,7 +132,7 @@ void RandomRay::event_advance_ray_first_collided()
   for (int j = 0; j < n_coord(); ++j) {
     coord(j).r += distance * coord(j).u;
   }
-
+  //total_distance_track_ = distance_travelled_;
 }
 // Transports ray across a single source region
 void RandomRay::event_advance_ray()
@@ -241,7 +245,9 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     }
     delta_psi_[g] = new_delta_psi;
     angular_flux_[g] -= new_delta_psi;
-
+    // add the saving of uncollided_angular_flux_ 
+    // where should I save this? flat_source_domain?
+    angular_uncollided_flux_[g] = new_delta_psi / tau;
   }
 
 
@@ -256,6 +262,12 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     // this iteration
     for (int g = 0; g < negroups_; g++) {
       domain_->scalar_flux_new_[source_element + g] += delta_psi_[g];
+    }
+
+    if(settings::FIRST_COLLIDED_FLUX){
+      for (int g = 0; g < negroups_; g++) {
+      domain_->scalar_uncollided_flux_[source_element + g] += angular_uncollided_flux_[g] * distance;
+      }
     }
 
     // If the source region hasn't been hit yet this iteration,
@@ -283,11 +295,11 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     if (settings::FIRST_COLLIDED_FLUX){
       bool angular_flux_below_threshold = true;
     for (int g = 0; g < negroups_; g++) {
-      fmt::print("Angular_flux = {:.6f} \n", angular_flux_[g]);
-        if (angular_flux_[g] == 0) {
-            std::cerr << "Zero Flux." << std::endl;
+      //fmt::print("Angular_flux = {:.6f} \n", angular_flux_[g]);
+        if (angular_flux_initial_[g] == 0) {
+            //std::cerr << "Zero Flux." << std::endl;
         } else {
-        float ratio = angular_flux_[g];
+        float ratio = angular_flux_[g] / angular_flux_initial_[g]; // divide by initial_angular_flux[g]
           if (ratio >= settings::ray_threshold) {
             angular_flux_below_threshold = false;
             break;
@@ -359,9 +371,8 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
       for (int g = 0; g < negroups_; g++) {
         // Set angular flux spectrum equal to source spectrum
         angular_flux_[g] = discrete_probs[g];
-        fmt::print("angular_flux_ = {:.1f}\n", angular_flux_[g]);
-        //angular_flux_initial_[g] = angular_flux_[g];
-       // angular_flux_[g] = domain_->source_[source_region_idx * negroups_ + g];
+        angular_flux_initial_[g] = angular_flux_[g];
+        //fmt::print("angular_flux_ = {:.1f}\n", angular_flux_[g]);
       }
      }
     }
