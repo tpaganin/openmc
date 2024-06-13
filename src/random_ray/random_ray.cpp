@@ -247,7 +247,7 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     angular_flux_[g] -= new_delta_psi;
     // add the saving of uncollided_angular_flux_ 
     // where should I save this? flat_source_domain?
-    angular_uncollided_flux_[g] = new_delta_psi / tau;
+    angular_uncollided_flux_[g] = new_delta_psi / sigma_t;
   }
 
 
@@ -264,9 +264,10 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
       domain_->scalar_flux_new_[source_element + g] += delta_psi_[g];
     }
 
+    // already multiplying by the distance(volume) of that ray/region
     if(settings::FIRST_COLLIDED_FLUX){
       for (int g = 0; g < negroups_; g++) {
-      domain_->scalar_uncollided_flux_[source_element + g] += angular_uncollided_flux_[g] * distance;
+      domain_->scalar_uncollided_flux_[source_element + g] += angular_uncollided_flux_[g];
       }
     }
 

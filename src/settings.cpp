@@ -134,7 +134,7 @@ double weight_survive {1.0};
   // HARDCODED INPUTS - First Collided Flux
 float ray_threshold {1e-7f};
 bool FIRST_COLLIDED_FLUX {true};
-int n_uncollided_rays {10000};
+int n_uncollided_rays {100000};
 
 } // namespace settings
 

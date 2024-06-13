@@ -257,8 +257,10 @@ int64_t FlatSourceDomain::add_source_to_scalar_flux()
         scalar_flux_new_[idx] /= (sigma_t * volume);
         if(settings::FIRST_COLLIDED_FLUX){
            fixed_source_[idx] += scalar_flux_new_[idx];
-        }
+           //fmt::print("fixed_source_value_idx = {}\n", fixed_source_[idx]);
+        } else {
         scalar_flux_new_[idx] += source_[idx];
+        }
       } else if (volume > 0.0) {
         // 2. If the FSR was not hit this iteration, but has been hit some
         // previous iteration, then we simply set the new scalar flux to be
@@ -826,12 +828,15 @@ void FlatSourceDomain::output_to_vtk() const
     }
     
     // Plot fixed source
-    std::fprintf(plot, "SCALARS fixed_source int\n");
-    std::fprintf(plot, "LOOKUP_TABLE default\n");
-    for (int fsr : voxel_indices) {
-        float fsf = fixed_source_[fsr] / settings::n_uncollided_rays;
-        fsf = convert_to_big_endian<float>(fsf);
-        std::fwrite(&fsf, sizeof(float), 1, plot);
+      for (int g = 0; g < negroups_; g++) {
+      std::fprintf(plot, "SCALARS fixed_source_group_%d float\n", g);
+      std::fprintf(plot, "LOOKUP_TABLE default\n");
+      for (int fsr : voxel_indices) {
+        int64_t source_element = fsr * negroups_ + g;
+        float f_source = fixed_source_[source_element];
+        f_source = convert_to_big_endian<float>(f_source);
+        std::fwrite(&f_source, sizeof(float), 1, plot);
+      }
     }
   
     std::fclose(plot);

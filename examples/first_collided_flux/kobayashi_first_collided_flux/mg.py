@@ -239,7 +239,7 @@ def create_random_ray_model():
     settings.energy_mode = "multi-group"
     settings.batches = 100
     settings.inactive = 40
-    settings.particles = 10000
+    settings.particles = 5000
     settings.solver_type = 'random ray'
     settings.run_mode = 'fixed source'
     settings.random_ray['distance_active'] = 400.0

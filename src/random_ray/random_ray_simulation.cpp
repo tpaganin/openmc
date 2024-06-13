@@ -274,21 +274,26 @@ void RandomRaySimulation::simulate()
     
     // Normalize scalar flux and update volumes
     domain_.normalize_scalar_flux_and_volumes(
-    RandomRay::total_travelled_distance_);
+    settings::n_uncollided_rays);
+    //RandomRay::total_travelled_distance_);
 
     // Add source to scalar flux, compute number of FSR hits
     int64_t n_hits = domain_.add_source_to_scalar_flux();
 
     // Add this iteration's scalar flux estimate to final accumulated estimate
-    domain_.accumulate_iteration_flux();
+    //domain_.accumulate_iteration_flux();
 
+    // Count fixed source regions
+    domain_.count_fixed_source_regions();
+
+    // reset values from RandomRay iteration
     domain_.batch_reset();
-    uncollided_flux_add_ = {true};
-    settings::FIRST_COLLIDED_FLUX = {false};
-    simulation::current_batch = 0;
-
+    uncollided_flux_add_ = {true}; //keep that for adding uncollided flux at the end
+    settings::FIRST_COLLIDED_FLUX = {false}; //move to regular fixed source RR
+    simulation::current_batch = 0; //garantee the first batch will be 1 in RR
     }
   }
+  
   // Random ray power iteration loop
   while (simulation::current_batch < settings::n_batches) {
 
