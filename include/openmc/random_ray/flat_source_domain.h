@@ -115,6 +115,8 @@ public:
     Discrete* discrete, double strength_factor, int32_t target_material_id);
   void convert_fixed_sources();
   void count_fixed_source_regions();
+  void compute_first_collided_flux();
+  void normalize_uncollided_scalar_flux(double number_of_particles);
   void add_uncollided_flux();
 
   //----------------------------------------------------------------------------
@@ -136,6 +138,7 @@ public:
   vector<double> volume_;
   vector<int> position_recorded_;
   vector<Position> position_;
+  vector<int> n_rays_hit_;
 
   // 2D arrays stored in 1D representing values for all source regions x energy
   // groups

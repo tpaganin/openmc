@@ -228,26 +228,23 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
   // angle data.
   const int t = 0;
   const int a = 0;
-  float new_delta_psi;
+
   
   // MOC incoming flux attenuation + source contribution/attenuation equation
   for (int g = 0; g < negroups_; g++) {
+    float new_delta_psi;
     float sigma_t = data::mg.macro_xs_[material].get_xs(
       MgxsType::TOTAL, g, NULL, NULL, NULL, t, a);
     float tau = sigma_t * distance;
     float exponential = cjosey_exponential(tau); // exponential = 1 - exp(-tau)
     if(settings::FIRST_COLLIDED_FLUX){
       new_delta_psi = (angular_flux_[g]) * exponential;
-    }
-    else{
+    } else {
       new_delta_psi =
       (angular_flux_[g] - domain_->source_[source_element + g]) * exponential;
     }
     delta_psi_[g] = new_delta_psi;
     angular_flux_[g] -= new_delta_psi;
-    // add the saving of uncollided_angular_flux_ 
-    // where should I save this? flat_source_domain?
-    angular_uncollided_flux_[g] = new_delta_psi / sigma_t;
   }
 
 
@@ -264,12 +261,8 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
       domain_->scalar_flux_new_[source_element + g] += delta_psi_[g];
     }
 
-    // already multiplying by the distance(volume) of that ray/region
-    if(settings::FIRST_COLLIDED_FLUX){
-      for (int g = 0; g < negroups_; g++) {
-      domain_->scalar_uncollided_flux_[source_element + g] += angular_uncollided_flux_[g];
-      }
-    }
+    // add a function that tracks how many rays it passed through
+    //domain_->n_rays_hit_[source_region] += 1;
 
     // If the source region hasn't been hit yet this iteration,
     // indicate that it now has
@@ -292,11 +285,12 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     // Release lock
     domain_->lock_[source_region].unlock();
 
-    // check attenuation in FIRST_ COLLIDED_FLUX
+    // check attenuation in FIRST_ COLLIDED_FLUX 
+    // TBD : if high energy neutrons downscattering can 
+    // cause convergence criteria issuess
     if (settings::FIRST_COLLIDED_FLUX){
       bool angular_flux_below_threshold = true;
     for (int g = 0; g < negroups_; g++) {
-      //fmt::print("Angular_flux = {:.6f} \n", angular_flux_[g]);
         if (angular_flux_initial_[g] == 0) {
             //std::cerr << "Zero Flux." << std::endl;
         } else {
@@ -348,7 +342,7 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
     site.E = negroups_ - site.E - 1.;
     //this->from_source(&site);
     from_source(&site);
-
+    //int material = this->material();
     //Source* source_handle = model::external_sources[site.source_id];
     // Check for independent source
     //IndependentSource* is = dynamic_cast<IndependentSource*>(source_handle);
@@ -371,7 +365,9 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
    
       for (int g = 0; g < negroups_; g++) {
         // Set angular flux spectrum equal to source spectrum
-        angular_flux_[g] = discrete_probs[g];
+       // float sigma_t = data::mg.macro_xs_[material].get_xs(
+        //  MgxsType::TOTAL, g, NULL, NULL, NULL, 0, 0);
+        angular_flux_[g] = discrete_probs[g];// / sigma_t;
         angular_flux_initial_[g] = angular_flux_[g];
         //fmt::print("angular_flux_ = {:.1f}\n", angular_flux_[g]);
       }

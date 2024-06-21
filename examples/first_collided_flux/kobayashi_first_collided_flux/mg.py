@@ -237,9 +237,9 @@ def create_random_ray_model():
     # Instantiate a Settings object, set all runtime parameters, and export to XML
     settings = openmc.Settings()
     settings.energy_mode = "multi-group"
-    settings.batches = 100
-    settings.inactive = 40
-    settings.particles = 5000
+    settings.batches = 200
+    settings.inactive = 100
+    settings.particles = 10000
     settings.solver_type = 'random ray'
     settings.run_mode = 'fixed source'
     settings.random_ray['distance_active'] = 400.0
@@ -263,7 +263,7 @@ def create_random_ray_model():
     spatial_distribution = openmc.stats.Box(lower_left_src, upper_right_src, only_fissionable=False)
 
     #source = openmc.IndependentSource(energy=energy_distribution, domains=[source_mat], strength=2.0) # works
-    source = openmc.IndependentSource(space=spatial_distribution, energy=energy_dist,  strength=1.0) # works
+    source = openmc.IndependentSource(space=spatial_distribution, energy=energy_dist, strength=1.0) # works
 
 
     #settings.source = [source, rr_source]

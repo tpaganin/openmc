@@ -266,22 +266,18 @@ void RandomRaySimulation::simulate()
       total_geometric_intersections_ +=
         ray.transport_history_based_single_ray_first_collided();
     }
-    
-    //(TOMAS) Do I need this?
-    // If using multiple MPI ranks, perform all reduce on all transport results
-    //domain_.all_reduce_replicated_source_regions();
-    simulation::current_batch = 1;
-    
-    // Normalize scalar flux and update volumes
-    domain_.normalize_scalar_flux_and_volumes(
-    settings::n_uncollided_rays);
-    //RandomRay::total_travelled_distance_);
 
-    // Add source to scalar flux, compute number of FSR hits
+    // add scalar_new_flux calculations
     int64_t n_hits = domain_.add_source_to_scalar_flux();
 
-    // Add this iteration's scalar flux estimate to final accumulated estimate
-    //domain_.accumulate_iteration_flux();
+    // Normalizing the scalar_new_flux and volumes
+    //domain_.normalize_scalar_flux_and_volumes(settings::n_uncollided_rays);
+
+    // Normalize scalar_uncollided_flux
+    domain_.normalize_uncollided_scalar_flux(settings::n_uncollided_rays);
+
+    // compute first_collided_fixed_source 
+    domain_.compute_first_collided_flux();
 
     // Count fixed source regions
     domain_.count_fixed_source_regions();
@@ -291,6 +287,7 @@ void RandomRaySimulation::simulate()
     uncollided_flux_add_ = {true}; //keep that for adding uncollided flux at the end
     settings::FIRST_COLLIDED_FLUX = {false}; //move to regular fixed source RR
     simulation::current_batch = 0; //garantee the first batch will be 1 in RR
+    n_hits = 0;
     }
   }
   
@@ -371,10 +368,10 @@ void RandomRaySimulation::simulate()
   } // End random ray power iteration loop
   
   // add uncollided flux to final solution
-  fmt::print("uncollided_flux_add_ = {}\n", uncollided_flux_add_);
-  if (uncollided_flux_add_){
-    domain_.add_uncollided_flux();
-  }
+  //fmt::print("uncollided_flux_add_ = {}\n", uncollided_flux_add_);
+  //if (uncollided_flux_add_){
+  //  domain_.add_uncollided_flux();
+  //}
 }
 
 void RandomRaySimulation::reduce_simulation_statistics()
