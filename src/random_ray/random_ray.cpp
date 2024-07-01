@@ -75,14 +75,15 @@ RandomRay::RandomRay()
   : angular_flux_(data::mg.num_energy_groups_),
     delta_psi_(data::mg.num_energy_groups_),
     negroups_(data::mg.num_energy_groups_),
-    angular_flux_initial_(data::mg.num_energy_groups_),
-    angular_uncollided_flux_(data::mg.num_energy_groups_)
+    angular_flux_initial_(data::mg.num_energy_groups_)
+    //angular_uncollided_flux_(data::mg.num_energy_groups_)
 {}
 
 RandomRay::RandomRay(uint64_t ray_id, FlatSourceDomain* domain) : RandomRay()
 {
   initialize_ray(ray_id, domain);
 }
+
 // Transports ray until termination criteria are met
 uint64_t RandomRay::transport_history_based_single_ray()
 {
@@ -96,44 +97,7 @@ uint64_t RandomRay::transport_history_based_single_ray()
 
   return n_event();
 }
-// Transports uncollided ray until termination criteria are met
-uint64_t RandomRay::transport_history_based_single_ray_first_collided()
-{
-  using namespace openmc;
-  while (alive()) {
-    event_advance_ray_first_collided();
-    if (!alive())
-      break;
-    event_cross_surface();
-  }
-  total_travelled_distance_ += distance_travelled_;
-  return n_event();
-}
 
-// Transports uncollided ray across a single region.
-void RandomRay::event_advance_ray_first_collided()
-{
-  // Find the distance to the nearest boundary
-  boundary() = distance_to_boundary(*this);
-  double distance = boundary().distance;
-
- if (distance <= 0.0) {
-    mark_as_lost("Negative transport distance detected for particle " +
-                 std::to_string(id()));
-    return;
-  }
-  // For Uncollided/First Collided Flux, it is calculated the attenuation
-  // as the ray advance through the region and a check if the outcoming 
-  // flux reaches the defined threshold.
-    distance_travelled_ += distance;
-    attenuate_flux(distance, true);
-
-  // Advance particle
-  for (int j = 0; j < n_coord(); ++j) {
-    coord(j).r += distance * coord(j).u;
-  }
-  //total_distance_track_ = distance_travelled_;
-}
 // Transports ray across a single source region
 void RandomRay::event_advance_ray()
 {
@@ -192,6 +156,45 @@ void RandomRay::event_advance_ray()
   }
 }
 
+// Transports uncollided ray until termination criteria are met
+uint64_t RandomRay::transport_history_based_single_ray_first_collided()
+{
+  using namespace openmc;
+  while (alive()) {
+    event_advance_ray_first_collided();
+    if (!alive())
+      break;
+    event_cross_surface();
+  }
+  total_travelled_distance_ += distance_travelled_;
+  return n_event();
+}
+
+// Transports uncollided ray across a single region.
+void RandomRay::event_advance_ray_first_collided()
+{
+  // Find the distance to the nearest boundary
+  boundary() = distance_to_boundary(*this);
+  double distance = boundary().distance;
+
+ if (distance <= 0.0) {
+    mark_as_lost("Negative transport distance detected for particle " +
+                 std::to_string(id()));
+    return;
+  }
+  // For Uncollided/First Collided Flux, it is calculated the attenuation
+  // as the ray advance through the region and a check if the outcoming 
+  // flux reaches the defined threshold.
+    distance_travelled_ += distance;
+    attenuate_flux(distance, true);
+
+  // Advance particle
+  for (int j = 0; j < n_coord(); ++j) {
+    coord(j).r += distance * coord(j).u;
+  }
+  //total_distance_track_ = distance_travelled_;
+}
+
 
 // This function forms the inner loop of the random ray transport process.
 // It is responsible for several tasks. Based on the incoming angular flux
@@ -231,6 +234,7 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
 
   
   // MOC incoming flux attenuation + source contribution/attenuation equation
+  if (!settings::uncollided_flux_volume){
   for (int g = 0; g < negroups_; g++) {
     float new_delta_psi;
     float sigma_t = data::mg.macro_xs_[material].get_xs(
@@ -246,7 +250,7 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     delta_psi_[g] = new_delta_psi;
     angular_flux_[g] -= new_delta_psi;
   }
-
+  }
 
   // If ray is in the active phase (not in dead zone), make contributions to
   // source region bookkeeping
@@ -257,10 +261,11 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
 
     // Accumulate delta psi into new estimate of source region flux for
     // this iteration
+    if (!settings::uncollided_flux_volume){
     for (int g = 0; g < negroups_; g++) {
       domain_->scalar_flux_new_[source_element + g] += delta_psi_[g];
     }
-
+    }
     // add a function that tracks how many rays it passed through
     //domain_->n_rays_hit_[source_region] += 1;
 
@@ -272,7 +277,11 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
 
     // Accomulate volume (ray distance) into this iteration's estimate
     // of the source region's volume
+    if (!settings::FIRST_COLLIDED_FLUX){
     domain_->volume_[source_region] += distance;
+    } else if (settings::uncollided_flux_volume) {
+    domain_->volume_[source_region] += distance;
+    }
 
     // Tally valid position inside the source region (e.g., midpoint of
     // the ray) if not done already
@@ -288,7 +297,7 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     // check attenuation in FIRST_ COLLIDED_FLUX 
     // TBD : if high energy neutrons downscattering can 
     // cause convergence criteria issuess
-    if (settings::FIRST_COLLIDED_FLUX){
+    if (settings::FIRST_COLLIDED_FLUX && !settings::uncollided_flux_volume){
       bool angular_flux_below_threshold = true;
     for (int g = 0; g < negroups_; g++) {
         if (angular_flux_initial_[g] == 0) {
@@ -322,12 +331,12 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
   wgt() = 1.0;
 
   // set identifier for particle
+  id() = simulation::work_index[mpi::rank] + ray_id;
+
   if (settings::FIRST_COLLIDED_FLUX){
-    id() = ray_id;
     simulation::current_batch = 1;
-  } else {
-    id() = simulation::work_index[mpi::rank] + ray_id;
-  }
+  } 
+  
   // set random number seed
   int64_t particle_seed =
     (simulation::current_batch - 1) * settings::n_particles + id();
@@ -335,7 +344,7 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
   stream() = STREAM_TRACKING;
 
   // Sample from input Source
-  if (settings::FIRST_COLLIDED_FLUX){
+  if (settings::FIRST_COLLIDED_FLUX && !settings::uncollided_flux_volume){
     auto site = sample_external_source(current_seed());
     site.E = lower_bound_index(
     data::mg.rev_energy_bins_.begin(), data::mg.rev_energy_bins_.end(), site.E);
@@ -362,7 +371,7 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
     if (disc != nullptr) {
     const auto& discrete_energies = disc->x();
     const auto& discrete_probs = disc->prob();
-   
+    
       for (int g = 0; g < negroups_; g++) {
         // Set angular flux spectrum equal to source spectrum
        // float sigma_t = data::mg.macro_xs_[material].get_xs(
@@ -374,8 +383,7 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
      }
     }
     
-  }
-  else {
+  } else {
     // Sample from ray source distribution
     SourceSite site {ray_source_->sample(current_seed())};
     site.E = lower_bound_index(

@@ -252,26 +252,47 @@ void RandomRaySimulation::simulate()
     domain_.convert_fixed_sources();
     domain_.count_fixed_source_regions();
     } else {
-    // ADD routine for first collided source
-    fmt::print("FIRST COLLIDED FLUX IS ACTIVE \n");
     // FIRST_COLLIDED_FLUX calculation routine:
+    fmt::print("FIRST COLLIDED FLUX IS ACTIVE \n");
 
+    double start_volume_estimation = omp_get_wtime();
+
+    // Make sure batch reset
     domain_.batch_reset();
-    // Transport sweep over all random rays for the iteration
-//#pragma omp parallel for schedule(dynamic)                                     \
+
+    // Turn on volume pre calculation
+    fmt::print("Volume estimation \n");
+   settings::uncollided_flux_volume = {true};
+
+    // Pre calculate volume
+#pragma omp parallel for schedule(dynamic)                                     \
   reduction(+ : total_geometric_intersections_)
-    //for (int i = 0; i < simulation::work_per_rank; i++) {
+    for (int i =0; i< settings::n_volume_estimator_rays; i++){
+      RandomRay ray(i, &domain_);
+      total_geometric_intersections_ +=
+        ray.transport_history_based_single_ray();
+    }
+
+  double end_volume_estimation = omp_get_wtime();
+  settings::uncollided_flux_volume = {false};
+
+  fmt::print("Volume estimation run time = {} \n", end_volume_estimation-start_volume_estimation);
+  fmt::print("First Collided Method \n");
+
+    // Transport sweep over all random rays for the iteration
+#pragma omp parallel for schedule(dynamic)                                     \
+  reduction(+ : total_geometric_intersections_)
       for (int i =0; i< settings::n_uncollided_rays; i++){
       RandomRay ray(i, &domain_);
       total_geometric_intersections_ +=
         ray.transport_history_based_single_ray_first_collided();
-    }
+  }
+
+    // Normalizing the scalar_new_flux and volumes
+    domain_.normalize_scalar_flux_and_volumes(settings::n_volume_estimator_rays * RandomRay::distance_active_);
 
     // add scalar_new_flux calculations
     int64_t n_hits = domain_.add_source_to_scalar_flux();
-
-    // Normalizing the scalar_new_flux and volumes
-    //domain_.normalize_scalar_flux_and_volumes(settings::n_uncollided_rays);
 
     // Normalize scalar_uncollided_flux
     domain_.normalize_uncollided_scalar_flux(settings::n_uncollided_rays);
@@ -279,15 +300,16 @@ void RandomRaySimulation::simulate()
     // compute first_collided_fixed_source 
     domain_.compute_first_collided_flux();
 
-    // Count fixed source regions
+    // Count fixed source regions - CHANGE HERE TO ACCOUNT first_collided_Flux
     domain_.count_fixed_source_regions();
 
     // reset values from RandomRay iteration
-    domain_.batch_reset();
-    uncollided_flux_add_ = {true}; //keep that for adding uncollided flux at the end
+    settings::first_collided_mode = {true}; //keep that for adding uncollided flux at the end
     settings::FIRST_COLLIDED_FLUX = {false}; //move to regular fixed source RR
     simulation::current_batch = 0; //garantee the first batch will be 1 in RR
     n_hits = 0;
+    double first_collided_estimated_time = omp_get_wtime();
+    fmt::print("Volume estimation run time = {} \n", first_collided_estimated_time-end_volume_estimation);
     }
   }
   
@@ -366,12 +388,6 @@ void RandomRaySimulation::simulate()
     finalize_generation();
     finalize_batch();
   } // End random ray power iteration loop
-  
-  // add uncollided flux to final solution
-  //fmt::print("uncollided_flux_add_ = {}\n", uncollided_flux_add_);
-  //if (uncollided_flux_add_){
-  //  domain_.add_uncollided_flux();
-  //}
 }
 
 void RandomRaySimulation::reduce_simulation_statistics()

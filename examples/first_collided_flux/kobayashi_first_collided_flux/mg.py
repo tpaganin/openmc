@@ -100,10 +100,16 @@ def create_random_ray_model():
     ll = [-5.0, -5.0, -5.0]
     pitch = [delta, delta, delta]
 
+    # create another control for a second division in one specific region such as the source.
+    n2 = 10
+    delta2 = 10 / n2
+    ll2 = [-5.0, -5.0, -5.0] #[-2.5, -2.5, -2.5]
+    pitch2 = [delta2, delta2, delta2]
+
     source_lattice = openmc.RectLattice()
-    source_lattice.lower_left = ll
-    source_lattice.pitch = pitch
-    source_lattice.universes = fill_3d_list(n, sub)
+    source_lattice.lower_left = ll2
+    source_lattice.pitch = pitch2
+    source_lattice.universes = fill_3d_list(n2, sub)
     
     void_lattice = openmc.RectLattice()
     void_lattice.lower_left = ll
@@ -237,8 +243,8 @@ def create_random_ray_model():
     # Instantiate a Settings object, set all runtime parameters, and export to XML
     settings = openmc.Settings()
     settings.energy_mode = "multi-group"
-    settings.batches = 200
-    settings.inactive = 100
+    settings.batches = 100
+    settings.inactive = 40
     settings.particles = 10000
     settings.solver_type = 'random ray'
     settings.run_mode = 'fixed source'

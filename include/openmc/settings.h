@@ -144,7 +144,11 @@ extern double weight_survive;      //!< Survival weight after Russian roulette
   // HARDCODED INPUTS - First Collided Flux
 extern float ray_threshold;
 extern bool FIRST_COLLIDED_FLUX;
+extern bool uncollided_flux_volume;
 extern int n_uncollided_rays;
+extern int n_volume_estimator_rays;
+extern bool first_collided_mode;
+
 
 } // namespace settings
 

@@ -37,11 +37,13 @@ public:
   static double distance_active_;        // Active ray length
   static unique_ptr<Source> ray_source_; // Starting source for ray sampling
   static double total_travelled_distance_;
+ 
   //----------------------------------------------------------------------------
   // Public data members
   vector<float> angular_flux_;
   vector<float> angular_flux_initial_;
-  vector<float> angular_uncollided_flux_;
+  //vector<float> angular_uncollided_flux_;
+
   
 private:
   //----------------------------------------------------------------------------
