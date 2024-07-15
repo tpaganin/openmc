@@ -259,6 +259,7 @@ void RandomRaySimulation::simulate()
 
     // Make sure batch reset
     domain_.batch_reset();
+    int64_t n_u_hits = 0;
 
     // Turn on volume pre calculation
     fmt::print("Volume estimation \n");
@@ -276,6 +277,9 @@ void RandomRaySimulation::simulate()
   double end_volume_estimation = omp_get_wtime();
   settings::uncollided_flux_volume = {false};
 
+  // Normalizing the scalar_new_flux and volumes
+  domain_.normalize_scalar_flux_and_volumes(settings::n_volume_estimator_rays * RandomRay::distance_active_);
+
   fmt::print("Volume estimation run time = {:.4f} \n", end_volume_estimation-start_volume_estimation);
   fmt::print("First Collided Method \n");
 
@@ -287,9 +291,6 @@ void RandomRaySimulation::simulate()
       total_geometric_intersections_ +=
         ray.transport_history_based_single_ray_first_collided();
   }
-
-    // Normalizing the scalar_new_flux and volumes
-    domain_.normalize_scalar_flux_and_volumes(settings::n_volume_estimator_rays * RandomRay::distance_active_);
 
     // add scalar_new_flux calculations
     int64_t n_hits = domain_.add_source_to_scalar_flux();
@@ -303,11 +304,18 @@ void RandomRaySimulation::simulate()
     // Count fixed source regions - CHANGE HERE TO ACCOUNT first_collided_Flux
     domain_.count_fixed_source_regions();
 
+    // save number of hit FSR
+    n_u_hits += n_hits;
+    
+    // if (n_u_hits < domain.n_fixed_source_regions){
+    // criteria to trigger more for ray-tracing loops
+    //}
     // reset values from RandomRay iteration
     settings::first_collided_mode = {true}; //keep that for adding uncollided flux at the end
     settings::FIRST_COLLIDED_FLUX = {false}; //move to regular fixed source RR
     simulation::current_batch = 0; //garantee the first batch will be 1 in RR
     n_hits = 0;
+    fmt::print("number of FSR hits = {:.4f} \n", n_u_hits);
     double first_collided_estimated_time = omp_get_wtime();
     fmt::print("First Collided Method run time = {:.4f} \n", first_collided_estimated_time-end_volume_estimation);
     }

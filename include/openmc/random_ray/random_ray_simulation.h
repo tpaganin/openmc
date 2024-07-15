@@ -50,6 +50,8 @@ private:
   // Number of energy groups
   int negroups_;
 
+  // FSR tracker for FC method
+  //int64_t n_u_hits {0};
 
 
 }; // class RandomRaySimulation
