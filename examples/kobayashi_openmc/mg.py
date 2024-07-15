@@ -203,17 +203,24 @@ def create_random_ray_model():
     # Create the neutron source in the bottom right of the moderator
     strengths = [1.0] # Good - fast group appears largest (besides most thermal)
     midpoints = [100.0]
-    energy_distribution = openmc.stats.Discrete(x=midpoints,p=strengths)
+    energy_dist = openmc.stats.Discrete(x=midpoints,p=strengths)
     
-    lower_left_src = [0.0, 0.0, 0.0]
-    upper_right_src = [10.0, 10.0, 10.0]
-    spatial_distribution = openmc.stats.Box(lower_left_src, upper_right_src, only_fissionable=False)
+    #source 1 - base
+    lower_left_src_1 = [0.0, 0.0, 0.0]
+    upper_right_src_1 = [10.0, 10.0, 10.0]
+    spatial_distribution_1 = openmc.stats.Box(lower_left_src_1, upper_right_src_1, only_fissionable=False)
+    # source 2 - top
+    #lower_left_src_9 = [50.0, 90.0, 50.0]
+    #upper_right_src_9 = [60.0, 100.0, 60.0]
+    #spatial_distribution_9 = openmc.stats.Box(lower_left_src_9, upper_right_src_9, only_fissionable=False)
+
 
     #source = openmc.IndependentSource(energy=energy_distribution, domains=[source_mat], strength=2.0) # works
-    source = openmc.IndependentSource(space=spatial_distribution, energy=energy_distribution,  strength=1.0) # works
-    
+    source_1 = openmc.IndependentSource(space=spatial_distribution_1, energy=energy_dist, strength=1.0) # works
+    #source_9 = openmc.IndependentSource(space=spatial_distribution_9, energy=energy_dist, strength=1.0) # works
+
     #settings.source = [source, rr_source]
-    settings.source = [source]
+    settings.source = [source_1]#, source_9]
     #settings.export_to_xml()
 
     ###############################################################################

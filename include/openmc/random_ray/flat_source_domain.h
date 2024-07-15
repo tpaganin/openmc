@@ -117,7 +117,7 @@ public:
   void count_fixed_source_regions();
   void compute_first_collided_flux();
   void normalize_uncollided_scalar_flux(double number_of_particles);
-  void add_uncollided_flux();
+  void update_volume_uncollided_flux();
 
   //----------------------------------------------------------------------------
   // Public Data members

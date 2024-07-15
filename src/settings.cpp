@@ -135,8 +135,8 @@ double weight_survive {1.0};
 float ray_threshold {1e-12f};
 bool FIRST_COLLIDED_FLUX {true};
 bool uncollided_flux_volume {false};
-int n_uncollided_rays {100000};
-int n_volume_estimator_rays {1000};
+int n_uncollided_rays {200000};
+int n_volume_estimator_rays {10000};
 bool first_collided_mode {false};
 
 } // namespace settings

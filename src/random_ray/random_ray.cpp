@@ -295,15 +295,18 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     domain_->lock_[source_region].unlock();
 
     // check attenuation in FIRST_ COLLIDED_FLUX 
-    // TBD : if high energy neutrons downscattering can 
-    // cause convergence criteria issuess
     if (settings::FIRST_COLLIDED_FLUX && !settings::uncollided_flux_volume){
       bool angular_flux_below_threshold = true;
     for (int g = 0; g < negroups_; g++) {
         if (angular_flux_initial_[g] == 0) {
+          if(angular_flux_[g] >= settings::ray_threshold){
+            angular_flux_below_threshold = false;
+            break;
+          }
+            // If initial angular flux is zero or below threshold, passes as true to kill the ray
             //std::cerr << "Zero Flux." << std::endl;
         } else {
-        float ratio = angular_flux_[g] / angular_flux_initial_[g]; // divide by initial_angular_flux[g]
+        float ratio = angular_flux_[g] / angular_flux_initial_[g]; 
           if (ratio >= settings::ray_threshold) {
             angular_flux_below_threshold = false;
             break;
@@ -371,12 +374,11 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
     if (disc != nullptr) {
     const auto& discrete_energies = disc->x();
     const auto& discrete_probs = disc->prob();
-    
-      for (int g = 0; g < negroups_; g++) {
-        // Set angular flux spectrum equal to source spectrum
-       // float sigma_t = data::mg.macro_xs_[material].get_xs(
-        //  MgxsType::TOTAL, g, NULL, NULL, NULL, 0, 0);
-        angular_flux_[g] = discrete_probs[g];// / sigma_t;
+    //double source_strength = is->strength();
+
+      for (int e = 0; e < discrete_energies.size(); e++) {
+        int g = data::mg.get_group_index(discrete_energies[e]);
+        angular_flux_[g] =  discrete_probs[e];//source_strength * / sigma_t;
         angular_flux_initial_[g] = angular_flux_[g];
         //fmt::print("angular_flux_ = {:.1f}\n", angular_flux_[g]);
       }

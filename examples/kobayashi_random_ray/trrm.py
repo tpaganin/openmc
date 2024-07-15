@@ -178,6 +178,18 @@ def create_random_ray_model():
             [au, au, au, au, au, au],
             [au, au, au, au, au, au]
                          ]
+    z_cap2 = [
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au],
+            [au, au, au, au, au, au]
+                         ]
 
     dogleg_pattern = [
             z_base,
@@ -185,7 +197,7 @@ def create_random_ray_model():
             z_col,
             z_high,
             z_cap,
-            z_cap
+            z_cap2
             ]
     
     x = 60.0
@@ -236,8 +248,8 @@ def create_random_ray_model():
     # Instantiate a Settings object, set all runtime parameters, and export to XML
     settings = openmc.Settings()
     settings.energy_mode = "multi-group"
-    settings.batches = 100
-    settings.inactive = 40
+    settings.batches = 200
+    settings.inactive = 100
     settings.particles = 10000
     settings.run_mode = 'fixed source'
     settings.random_ray['distance_active'] = 400.0

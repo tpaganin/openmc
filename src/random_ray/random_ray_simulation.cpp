@@ -276,7 +276,7 @@ void RandomRaySimulation::simulate()
   double end_volume_estimation = omp_get_wtime();
   settings::uncollided_flux_volume = {false};
 
-  fmt::print("Volume estimation run time = {} \n", end_volume_estimation-start_volume_estimation);
+  fmt::print("Volume estimation run time = {:.4f} \n", end_volume_estimation-start_volume_estimation);
   fmt::print("First Collided Method \n");
 
     // Transport sweep over all random rays for the iteration
@@ -309,7 +309,7 @@ void RandomRaySimulation::simulate()
     simulation::current_batch = 0; //garantee the first batch will be 1 in RR
     n_hits = 0;
     double first_collided_estimated_time = omp_get_wtime();
-    fmt::print("Volume estimation run time = {} \n", first_collided_estimated_time-end_volume_estimation);
+    fmt::print("First Collided Method run time = {:.4f} \n", first_collided_estimated_time-end_volume_estimation);
     }
   }
   
@@ -388,6 +388,11 @@ void RandomRaySimulation::simulate()
     finalize_generation();
     finalize_batch();
   } // End random ray power iteration loop
+
+  // add uncollided flux to final solution vtk
+  if(settings::first_collided_mode){
+  domain_.update_volume_uncollided_flux();
+  }
 }
 
 void RandomRaySimulation::reduce_simulation_statistics()

@@ -141,11 +141,12 @@ if (settings::first_collided_mode){
   for (int sr = 0; sr < n_source_regions_; sr++) {
     double volume = volume_[sr];
     int material = material_[sr];
-
-    for (int g = 0; g < negroups_; g++) {
-      if (volume == 0.0f){
-      fixed_source_[sr * negroups_ + g] = 0.0f;
-      } else {
+    if (volume == 0.0f){
+      for (int g = 0; g < negroups_; g++) {
+        fixed_source_[sr * negroups_ + g] = 0.0f;
+      }
+    } else {
+      for (int g = 0; g < negroups_; g++) {
       fixed_source_[sr * negroups_ + g] = (scalar_first_collided_flux_[sr * negroups_ + g] /(simulation_volume_ * volume));
       }
     }
@@ -272,14 +273,16 @@ void FlatSourceDomain::normalize_uncollided_scalar_flux(double number_of_particl
   float normalization_factor = (1.0)/ number_of_particles;
     // Determine Source_total Scailing factor if first collided
     double total_source_intensity = 0.0;
+    //int n_sources = 0;
     for (auto& s : model::external_sources){
-    total_source_intensity += s->strength(); 
-     fmt::print("total_source_strength = {}\n", total_source_intensity);
+    total_source_intensity += s->strength();
+    //n_sources ++; 
     }
+    fmt::print("total_source_strength = {}\n", total_source_intensity);
+    //fmt::print("number of sources = {}\n", n_sources);
 #pragma omp parallel for
 for (int64_t e = 0; e < scalar_uncollided_flux_.size(); e++) {
-      scalar_uncollided_flux_[e] *= (total_source_intensity * normalization_factor) ;
-
+      scalar_uncollided_flux_[e] *= ((total_source_intensity) * normalization_factor) ;
   }
  }
 
@@ -395,12 +398,13 @@ double FlatSourceDomain::compute_k_eff(double k_eff_old) const
 }
 
 
-void FlatSourceDomain::add_uncollided_flux()
+void FlatSourceDomain::update_volume_uncollided_flux()
 {
   #pragma omp parallel for
   for (int sr = 0; sr < n_source_regions_; sr++) {
+    double volume = volume_[sr] * simulation_volume_;
     for (int g = 0; g < negroups_; g++) {
-    scalar_flux_final_[sr * negroups_ + g] += (scalar_uncollided_flux_[sr * negroups_ + g]);
+    scalar_uncollided_flux_[sr * negroups_ + g] /= volume;
     }
   }
 }

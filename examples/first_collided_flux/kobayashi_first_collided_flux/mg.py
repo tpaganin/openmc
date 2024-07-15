@@ -19,35 +19,70 @@ def create_random_ray_model():
     ###############################################################################
     # Create multigroup data
 
-    # Instantiate the energy group data
-    ebins = [1e-5, 20.0e6]
+        # Instantiate the energy group data
+    ebins = [0.0, 1.0, 20.0e6]
     groups = openmc.mgxs.EnergyGroups(group_edges=ebins)
     
     # High scattering ratio means system is all scattering
     # Low means fully absorbing
     scattering_ratio = 0.5
 
-    source_total_xs = 0.1
+    source_total_xs = [0.1, 0.2]
     source_mat_data = openmc.XSdata('source', groups)
     source_mat_data.order = 0
-    source_mat_data.set_total([source_total_xs])
-    source_mat_data.set_absorption([source_total_xs * (1.0 - scattering_ratio)])
-    source_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[source_total_xs * scattering_ratio]]]),0,3))
-    
-    void_total_xs = 1.0e-4
+    source_mat_data.set_total([0.1, 0.2])
+    #source_mat_data.set_absorption([xs * (1.0 - scattering_ratio) for xs in source_total_xs])
+    source_mat_data.set_absorption([0.05, 0.1])
+    source_scatter_matrix = \
+            [[[0.045, 0.005],
+              [0.0, 0.1]]]
+    source_scatter_matrix = np.array(source_scatter_matrix)
+    source_scatter_matrix = np.rollaxis(source_scatter_matrix,0,3)
+    source_mat_data.set_scatter_matrix(source_scatter_matrix)
+    #source_scatter_matrix = np.rollaxis(np.array([[0.045, 0.005], [0.001, 0.099]]),0,2)
+    #source_scatter_matrix = source_scatter_matrix.reshape((2, 2, 1))  # Reshape to (2, 2, 1)
+    #source_mat_data.set_scatter_matrix(source_scatter_matrix)
+
+    void_total_xs = [1.0e-4, 2.0e-4]  # Example total cross-sections for two energy groups
     void_mat_data = openmc.XSdata('void', groups)
     void_mat_data.order = 0
-    void_mat_data.set_total([void_total_xs])
-    void_mat_data.set_absorption([void_total_xs * (1.0 - scattering_ratio)])
-    void_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[void_total_xs * scattering_ratio]]]),0,3))
-    
-    shield_total_xs = 0.1
+    void_mat_data.set_total([1.0e-4, 2.0e-4])
+    #void_mat_data.set_absorption([xs * (1.0 - scattering_ratio) for xs in void_total_xs])
+    void_mat_data.set_absorption([0.5e-4, 1.0e-4])
+    void_scatter_matrix = \
+            [[[4.5e-5, 5.0e-6],
+               [0.0, 1.0e-4]]]
+    void_scatter_matrix = np.array(void_scatter_matrix)
+    void_scatter_matrix = np.rollaxis(void_scatter_matrix,0,3)
+    void_mat_data.set_scatter_matrix(void_scatter_matrix)
+
+    #void_scatter_matrix = np.rollaxis(np.array([[4.5e-5, 5.0e-6], [1.0e-6, 9.9e-5]]),0,2) # Scatter from group 1 to 1 and 2
+    #void_scatter_matrix = void_scatter_matrix.reshape((2, 2, 1))  # Reshape to (2, 2, 1)
+    #void_mat_data.set_scatter_matrix(void_scatter_matrix)
+
+    # Define XSdata for shield material
+    shield_total_xs = [0.1, 0.2]  # Example total cross-sections for two energy groups
     shield_mat_data = openmc.XSdata('shield', groups)
     shield_mat_data.order = 0
-    shield_mat_data.set_total([shield_total_xs])
-    shield_mat_data.set_absorption([shield_total_xs * (1.0 - scattering_ratio)])
-    shield_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[shield_total_xs * scattering_ratio]]]),0,3))
+    shield_mat_data.set_total([0.1, 0.2])
+    #source_mat_data.set_absorption([xs * (1.0 - scattering_ratio) for xs in source_total_xs])
+    shield_mat_data.set_absorption([0.05, 0.1])
+    shield_scatter_matrix = \
+            [[[0.045, 0.005],
+              [0.0, 0.1]]]
+    shield_scatter_matrix = np.array(shield_scatter_matrix)
+    shield_scatter_matrix = np.rollaxis(shield_scatter_matrix,0,3)
+    shield_mat_data.set_scatter_matrix(shield_scatter_matrix)
+    
+    
+    #shield_mat_data.set_total(shield_total_xs)
+    #shield_mat_data.set_absorption([xs * (1.0 - scattering_ratio) for xs in shield_total_xs])
+    #shield_scatter_matrix = np.rollaxis(np.array([[0.045, 0.005], [0.001, 0.099]]),0,2)# Scatter from group 2 to 1 and 2
+    #shield_scatter_matrix = shield_scatter_matrix.reshape((2, 2, 1))
+    #shield_mat_data.set_scatter_matrix(shield_scatter_matrix)
 
+
+    # Create MGXS Library and add XSdata
     mg_cross_sections_file = openmc.MGXSLibrary(groups)
     mg_cross_sections_file.add_xsdatas([source_mat_data, void_mat_data, shield_mat_data])
     mg_cross_sections_file.export_to_hdf5()
@@ -259,21 +294,27 @@ def create_random_ray_model():
     #rr_source = openmc.IndependentSource(space=uniform_dist, particle="random_ray")
     
     # Create the neutron source in the bottom right of the moderator
-    strengths = [1.0] # Good - fast group appears largest (besides most thermal)
-    midpoints = [100.0]
+    strengths = [0.25, 0.75] # Good - fast group appears largest (besides most thermal)
+    midpoints = [0.5, 10.0e6]
     energy_dist = openmc.stats.Discrete(x=midpoints,p=strengths)
     #point_source_location = openmc.stats.Point((5.0, 5.0, 5.0))
     #source = openmc.IndependentSource(energy=energy_dist, space=point_source_location, strength=1.0) # base source material
-    lower_left_src = [0.0, 0.0, 0.0]
-    upper_right_src = [10.0, 10.0, 10.0]
-    spatial_distribution = openmc.stats.Box(lower_left_src, upper_right_src, only_fissionable=False)
+    #source 1 - base
+    lower_left_src_1 = [0.0, 0.0, 0.0]
+    upper_right_src_1 = [10.0, 10.0, 10.0]
+    spatial_distribution_1 = openmc.stats.Box(lower_left_src_1, upper_right_src_1, only_fissionable=False)
+    # source 2 - top
+    #lower_left_src_9 = [50.0, 90.0, 50.0]
+    #upper_right_src_9 = [60.0, 100.0, 60.0]
+    #spatial_distribution_9 = openmc.stats.Box(lower_left_src_9, upper_right_src_9, only_fissionable=False)
+
 
     #source = openmc.IndependentSource(energy=energy_distribution, domains=[source_mat], strength=2.0) # works
-    source = openmc.IndependentSource(space=spatial_distribution, energy=energy_dist, strength=1.0) # works
-
+    source_1 = openmc.IndependentSource(space=spatial_distribution_1, energy=energy_dist, strength=1.0) # works
+    #source_9 = openmc.IndependentSource(space=spatial_distribution_9, energy=energy_dist, strength=1.0) # works
 
     #settings.source = [source, rr_source]
-    settings.source = [source]
+    settings.source = [source_1]#, source_9]
     #settings.export_to_xml()
 
     ###############################################################################
