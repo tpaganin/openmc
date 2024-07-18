@@ -118,6 +118,12 @@ public:
   void compute_first_collided_flux();
   void normalize_uncollided_scalar_flux(double number_of_particles);
   void update_volume_uncollided_flux();
+  double compute_fixed_source_normalization_factor() const;
+  void reset_hit();
+
+  //----------------------------------------------------------------------------
+  // Static Data members
+  static bool volume_normalized_flux_tallies_;
 
   //----------------------------------------------------------------------------
   // Public Data members

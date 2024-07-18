@@ -37,14 +37,18 @@ DiscreteIndex::DiscreteIndex(gsl::span<const double> p)
 
 void DiscreteIndex::assign(gsl::span<const double> p)
 {
-  prob_.assign(p.begin(), p.end());
+  
 
+  prob_.assign(p.begin(), p.end());
+  
   this->init_alias();
 }
 
 void DiscreteIndex::init_alias()
 {
   normalize();
+
+  prob_actual_ = prob_; // store a prob_actual for RR first collided-mode
 
   // The initialization and sampling method is based on Vose
   // (DOI: 10.1109/32.92917)

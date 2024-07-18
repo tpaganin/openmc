@@ -22,6 +22,9 @@ namespace openmc {
 // FlatSourceDomain implementation
 //==============================================================================
 
+// Static Variable Declarations
+bool FlatSourceDomain::volume_normalized_flux_tallies_ {false};
+
 FlatSourceDomain::FlatSourceDomain() : negroups_(data::mg.num_energy_groups_)
 {
   // Count the number of source regions, compute the cell offset
@@ -112,6 +115,11 @@ void FlatSourceDomain::batch_reset()
   parallel_fill<int>(was_hit_, 0);
 }
 
+void FlatSourceDomain::reset_hit()
+{
+  parallel_fill<int>(was_hit_,0);
+}
+
 void FlatSourceDomain::accumulate_iteration_flux()
 {
 #pragma omp parallel for
@@ -139,7 +147,7 @@ void FlatSourceDomain::update_neutron_source(double k_eff)
 if (settings::first_collided_mode){
 #pragma omp parallel for 
   for (int sr = 0; sr < n_source_regions_; sr++) {
-    double volume = volume_[sr];
+    double volume = simulation_volume_ * volume_[sr];
     int material = material_[sr];
     if (volume == 0.0f){
       for (int g = 0; g < negroups_; g++) {
@@ -147,7 +155,7 @@ if (settings::first_collided_mode){
       }
     } else {
       for (int g = 0; g < negroups_; g++) {
-      fixed_source_[sr * negroups_ + g] = (scalar_first_collided_flux_[sr * negroups_ + g] /(simulation_volume_ * volume));
+      fixed_source_[sr * negroups_ + g] = (scalar_first_collided_flux_[sr * negroups_ + g] /(volume));
       }
     }
   }
@@ -230,7 +238,8 @@ if (!settings::FIRST_COLLIDED_FLUX){
     volume_[sr] = volume_t_[sr] * volume_normalization_factor;
   }
 }
-
+ // just for volume calculations in the pre-computing stage, probably can be merged to the other one
+ // since scalar_flux_new_ will be zero at that time.
 if (settings::FIRST_COLLIDED_FLUX){
 #pragma omp parallel for
   for (int64_t sr = 0; sr < n_source_regions_; sr++) {
@@ -272,17 +281,16 @@ void FlatSourceDomain::normalize_uncollided_scalar_flux(double number_of_particl
   // multiply by simulation volume
   float normalization_factor = (1.0)/ number_of_particles;
     // Determine Source_total Scailing factor if first collided
-    double total_source_intensity = 0.0;
-    //int n_sources = 0;
-    for (auto& s : model::external_sources){
-    total_source_intensity += s->strength();
-    //n_sources ++; 
+
+  double user_external_source_strength = 0.0;
+    for (auto& ext_source : model::external_sources) {
+    user_external_source_strength += ext_source->strength();
     }
-    fmt::print("total_source_strength = {}\n", total_source_intensity);
-    //fmt::print("number of sources = {}\n", n_sources);
+    //fmt::print("total_source_strength = {}\n", total_source_intensity);
+
 #pragma omp parallel for
 for (int64_t e = 0; e < scalar_uncollided_flux_.size(); e++) {
-      scalar_uncollided_flux_[e] *= ((total_source_intensity) * normalization_factor) ;
+      scalar_uncollided_flux_[e] *= ((user_external_source_strength) * normalization_factor) ;
   }
  }
 
@@ -538,6 +546,52 @@ void FlatSourceDomain::reset_tally_volumes()
   }
 }
 
+// SOURCE NORMALIZATION FOR RR
+double FlatSourceDomain::compute_fixed_source_normalization_factor() const
+{
+  // If we are not in fixed source mode, then there are no external sources
+  // so no normalization is needed.
+  if (settings::run_mode != RunMode::FIXED_SOURCE) {
+    return 1.0;
+  }
+
+  // Step 1 is to sum over all source regions and energy groups to get the
+  // total external source strength in the simulation.
+  double simulation_external_source_strength = 0.0;
+#pragma omp parallel for reduction(+ : simulation_external_source_strength)
+  for (int sr = 0; sr < n_source_regions_; sr++) {
+    int material = material_[sr];
+    double volume = volume_[sr] * simulation_volume_;
+    for (int e = 0; e < negroups_; e++) {
+      // Temperature and angle indices, if using multiple temperature
+      // data sets and/or anisotropic data sets.
+      // TODO: Currently assumes we are only using single temp/single
+      // angle data.
+      const int t = 0;
+      const int a = 0;
+      float sigma_t = data::mg.macro_xs_[material].get_xs(
+        MgxsType::TOTAL, e, nullptr, nullptr, nullptr, t, a);
+      simulation_external_source_strength +=
+      fixed_source_[sr * negroups_ + e] * sigma_t * volume;
+    }
+  }
+
+  // Step 2 is to determine the total user-specified external source strength
+  double user_external_source_strength = 0.0;
+  for (auto& ext_source : model::external_sources) {
+    user_external_source_strength += ext_source->strength();
+  }
+
+  // The correction factor is the ratio of the user-specified external source
+  // strength to the simulation external source strength.
+  double source_normalization_factor =
+    user_external_source_strength / simulation_external_source_strength;
+    
+  return source_normalization_factor;
+}
+
+
+
 // Tallying in random ray is not done directly during transport, rather,
 // it is done only once after each power iteration. This is made possible
 // by way of a mapping data structure that relates spatial source regions
@@ -561,6 +615,9 @@ void FlatSourceDomain::random_ray_tally()
   const int t = 0;
   const int a = 0;
 
+  double source_normalization_factor =
+    compute_fixed_source_normalization_factor();
+
 // We loop over all source regions and energy groups. For each
 // element, we check if there are any scores needed and apply
 // them.
@@ -579,8 +636,13 @@ void FlatSourceDomain::random_ray_tally()
     double material = material_[sr];
     for (int g = 0; g < negroups_; g++) {
       int idx = sr * negroups_ + g;
-      double flux = scalar_flux_new_[idx] + (scalar_uncollided_flux_[idx] / volume );
-
+      double flux = 0.0;
+      if (settings::first_collided_mode){
+        flux = (scalar_flux_new_[idx] + (scalar_uncollided_flux_[idx] / volume));
+        //volume_normalized_flux_tallies_ = {true};
+      } else {
+      flux = (scalar_flux_new_[idx] * source_normalization_factor) ; //
+      }
       // Determine numerical score value
       for (auto& task : tally_task_[idx]) {
         double score;
@@ -624,17 +686,19 @@ void FlatSourceDomain::random_ray_tally()
 #pragma omp atomic
         tally.results_(task.filter_idx, task.score_idx, TallyResult::VALUE) +=
           score;
-      } // end tally task loop
-    }   // end energy group loop
+      }
+    }
 
     // For flux tallies, the total volume of the spatial region is needed
     // for normalizing the flux. We store this volume in a separate tensor.
     // We only contribute to each volume tally bin once per FSR.
-    for (const auto& task : volume_task_[sr]) {
-      if (task.score_type == SCORE_FLUX) {
+    if (volume_normalized_flux_tallies_) {
+      for (const auto& task : volume_task_[sr]) {
+        if (task.score_type == SCORE_FLUX) {
 #pragma omp atomic
-        tally_volumes_[task.tally_idx](task.filter_idx, task.score_idx) +=
-          volume;
+          tally_volumes_[task.tally_idx](task.filter_idx, task.score_idx) +=
+            volume;
+        }
       }
     }
   } // end FSR loop
@@ -644,16 +708,18 @@ void FlatSourceDomain::random_ray_tally()
   // and then scores. For each score, we check the tally data structure to
   // see what index that score corresponds to. If that score is a flux score,
   // then we divide it by volume.
-  for (int i = 0; i < model::tallies.size(); i++) {
-    Tally& tally {*model::tallies[i]};
+  if (volume_normalized_flux_tallies_) {
+    for (int i = 0; i < model::tallies.size(); i++) {
+      Tally& tally {*model::tallies[i]};
 #pragma omp parallel for
-    for (int bin = 0; bin < tally.n_filter_bins(); bin++) {
-      for (int score_idx = 0; score_idx < tally.n_scores(); score_idx++) {
-        auto score_type = tally.scores_[score_idx];
-        if (score_type == SCORE_FLUX) {
-          double vol = tally_volumes_[i](bin, score_idx);
-          if (vol > 0.0) {
-            tally.results_(bin, score_idx, TallyResult::VALUE) /= vol;
+      for (int bin = 0; bin < tally.n_filter_bins(); bin++) {
+        for (int score_idx = 0; score_idx < tally.n_scores(); score_idx++) {
+          auto score_type = tally.scores_[score_idx];
+          if (score_type == SCORE_FLUX) {
+            double vol = tally_volumes_[i](bin, score_idx);
+            if (vol > 0.0) {
+              tally.results_(bin, score_idx, TallyResult::VALUE) /= vol;
+            }
           }
         }
       }
@@ -934,7 +1000,7 @@ void FlatSourceDomain::apply_fixed_source_to_source_region(
   Discrete* discrete, double strength_factor, int64_t source_region)
 {
   const auto& discrete_energies = discrete->x();
-  const auto& discrete_probs = discrete->prob();
+  const auto& discrete_probs = discrete->prob_actual(); // prob_actual() is correct
 
   for (int e = 0; e < discrete_energies.size(); e++) {
     int g = data::mg.get_group_index(discrete_energies[e]);
@@ -1058,5 +1124,9 @@ void FlatSourceDomain::convert_fixed_sources()
     }
   }
 }
+
+// Sample external source distribution - FC method
+
+
 
 } // namespace openmc

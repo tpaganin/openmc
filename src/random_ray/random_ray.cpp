@@ -249,6 +249,10 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     }
     delta_psi_[g] = new_delta_psi;
     angular_flux_[g] -= new_delta_psi;
+    //fmt::print("energy group = {:}   ", g);
+    //fmt::print("angular flux energy = {:.3f}\n", angular_flux_[g]);
+
+    //
   }
   }
 
@@ -264,6 +268,7 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     if (!settings::uncollided_flux_volume){
     for (int g = 0; g < negroups_; g++) {
       domain_->scalar_flux_new_[source_element + g] += delta_psi_[g];
+
     }
     }
     // add a function that tracks how many rays it passed through
@@ -277,9 +282,7 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
 
     // Accomulate volume (ray distance) into this iteration's estimate
     // of the source region's volume
-    if (!settings::FIRST_COLLIDED_FLUX){
-    domain_->volume_[source_region] += distance;
-    } else if (settings::uncollided_flux_volume) {
+    if (!settings::FIRST_COLLIDED_FLUX || settings::uncollided_flux_volume){
     domain_->volume_[source_region] += distance;
     }
 
@@ -296,16 +299,21 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
 
     // check attenuation in FIRST_ COLLIDED_FLUX 
     if (settings::FIRST_COLLIDED_FLUX && !settings::uncollided_flux_volume){
+      // bool = true to kill ray
+      // ray is killed by default unless:
       bool angular_flux_below_threshold = true;
     for (int g = 0; g < negroups_; g++) {
+      // check if initial angular flux in that energy group is zero, therefore there is no ratio
+      // kill contidion given in absolute value (smaller than ray_threshold)
         if (angular_flux_initial_[g] == 0) {
+          // If initial angular flux is zero and below threshold, passes as true to kill the ray
           if(angular_flux_[g] >= settings::ray_threshold){
             angular_flux_below_threshold = false;
             break;
           }
-            // If initial angular flux is zero or below threshold, passes as true to kill the ray
-            //std::cerr << "Zero Flux." << std::endl;
+          // if angular_flux_[g] is less than threshold, it passes as true to kill ray
         } else {
+          // calculate the attenuation of ray (kills if ratio below threshold)
         float ratio = angular_flux_[g] / angular_flux_initial_[g]; 
           if (ratio >= settings::ray_threshold) {
             angular_flux_below_threshold = false;
@@ -354,37 +362,28 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
     site.E = negroups_ - site.E - 1.;
     //this->from_source(&site);
     from_source(&site);
-    //int material = this->material();
-    //Source* source_handle = model::external_sources[site.source_id];
-    // Check for independent source
-    //IndependentSource* is = dynamic_cast<IndependentSource*>(source_handle);
 
     std::unique_ptr<openmc::Source>& source_handle = model::external_sources[site.source_id];
+    //Source* s = model::external_sources[site.source_id].get();
     // Check for independent source
     IndependentSource* is = dynamic_cast<IndependentSource*>(source_handle.get());
-    if(is == nullptr){
-      fmt::print("nullptr - souce_handle.get\n");
-    }
-    if (is != nullptr) { // Ensure the cast was successful
-    Distribution* energy_dist = is->energy();
-    Discrete* disc = dynamic_cast<Discrete*>(energy_dist);
-        if(disc == nullptr){
-      fmt::print("nullptr - disc\n");
-    }
-    if (disc != nullptr) {
-    const auto& discrete_energies = disc->x();
-    const auto& discrete_probs = disc->prob();
+    //Distribution* energy_dist = is->energy();
+    //Discrete* disc = dynamic_cast<Discrete*>(energy_dist);
+    Discrete* energy_external_source = dynamic_cast<Discrete*>(is->energy());
+
+    const auto& discrete_energies = energy_external_source->x();
+    const auto& discrete_probs = energy_external_source->prob_actual();
+    //for (const auto& prob : discrete_probs) {
+    //    fmt::print("{:.3f}\n", prob);
+    //}
     //double source_strength = is->strength();
 
       for (int e = 0; e < discrete_energies.size(); e++) {
         int g = data::mg.get_group_index(discrete_energies[e]);
         angular_flux_[g] =  discrete_probs[e];//source_strength * / sigma_t;
         angular_flux_initial_[g] = angular_flux_[g];
-        //fmt::print("angular_flux_ = {:.1f}\n", angular_flux_[g]);
       }
-     }
-    }
-    
+
   } else {
     // Sample from ray source distribution
     SourceSite site {ray_source_->sample(current_seed())};
@@ -407,7 +406,7 @@ void RandomRay::initialize_ray(uint64_t ray_id, FlatSourceDomain* domain)
   }
 
   // initialize ray's starting angular flux spectrum
- if(settings::run_mode == RunMode::EIGENVALUE){
+ if(!settings::FIRST_COLLIDED_FLUX){
     // Initialize ray's starting angular flux to starting location's isotropic
     // source
     int i_cell = lowest_coord().cell;

@@ -263,7 +263,7 @@ void RandomRaySimulation::simulate()
 
     // Turn on volume pre calculation
     fmt::print("Volume estimation \n");
-   settings::uncollided_flux_volume = {true};
+    settings::uncollided_flux_volume = {true};
 
     // Pre calculate volume
 #pragma omp parallel for schedule(dynamic)                                     \
@@ -279,14 +279,20 @@ void RandomRaySimulation::simulate()
 
   // Normalizing the scalar_new_flux and volumes
   domain_.normalize_scalar_flux_and_volumes(settings::n_volume_estimator_rays * RandomRay::distance_active_);
-
+  domain_.reset_hit();
   fmt::print("Volume estimation run time = {:.4f} \n", end_volume_estimation-start_volume_estimation);
   fmt::print("First Collided Method \n");
+  
+    double fsr_ratio = 0.0;
+    int new_n_rays = settings::n_uncollided_rays;
+    int old_n_rays = 0;
 
+    while(fsr_ratio <= 0.99999){
+    int64_t n_u_hits = 0;
     // Transport sweep over all random rays for the iteration
 #pragma omp parallel for schedule(dynamic)                                     \
   reduction(+ : total_geometric_intersections_)
-      for (int i =0; i< settings::n_uncollided_rays; i++){
+      for (int i = old_n_rays; i< new_n_rays; i++){
       RandomRay ray(i, &domain_);
       total_geometric_intersections_ +=
         ray.transport_history_based_single_ray_first_collided();
@@ -296,26 +302,35 @@ void RandomRaySimulation::simulate()
     int64_t n_hits = domain_.add_source_to_scalar_flux();
 
     // Normalize scalar_uncollided_flux
-    domain_.normalize_uncollided_scalar_flux(settings::n_uncollided_rays);
+    domain_.normalize_uncollided_scalar_flux(new_n_rays);
 
     // compute first_collided_fixed_source 
     domain_.compute_first_collided_flux();
+    
+    // save number of hit FSR
+    n_u_hits = n_hits;
+     
 
-    // Count fixed source regions - CHANGE HERE TO ACCOUNT first_collided_Flux
+    fsr_ratio = static_cast<double>(n_u_hits) / domain_.n_source_regions_;
+    //fmt::print("number of FSR hits ratio = {:} \n", fsr_ratio);
+    //fmt::print("number of uncollided rays = {:} \n", new_n_rays);
+    // BREAK STATEMENT IN CASE IT DOESNT CONVERGE TO 1
+    if (new_n_rays >= 1e7) {
+      fmt::print("Uncollided rays limit achieved", new_n_rays);
+      break;
+    }
+    old_n_rays = new_n_rays;
+    new_n_rays *= 2;
+    }
+
+    // Count fixed source regions
     domain_.count_fixed_source_regions();
 
-    // save number of hit FSR
-    n_u_hits += n_hits;
-    
-    // if (n_u_hits < domain.n_fixed_source_regions){
-    // criteria to trigger more for ray-tracing loops
-    //}
     // reset values from RandomRay iteration
     settings::first_collided_mode = {true}; //keep that for adding uncollided flux at the end
     settings::FIRST_COLLIDED_FLUX = {false}; //move to regular fixed source RR
     simulation::current_batch = 0; //garantee the first batch will be 1 in RR
-    n_hits = 0;
-    fmt::print("number of FSR hits = {:.4f} \n", n_u_hits);
+    fmt::print("number of uncollided rays = {:} \n", old_n_rays);
     double first_collided_estimated_time = omp_get_wtime();
     fmt::print("First Collided Method run time = {:.4f} \n", first_collided_estimated_time-end_volume_estimation);
     }

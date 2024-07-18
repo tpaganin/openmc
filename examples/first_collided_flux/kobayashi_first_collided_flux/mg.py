@@ -20,14 +20,14 @@ def create_random_ray_model():
     # Create multigroup data
 
         # Instantiate the energy group data
-    ebins = [0.0, 1.0, 20.0e6]
+    ebins = [1e-5, 1e-1, 20.0e6]
     groups = openmc.mgxs.EnergyGroups(group_edges=ebins)
     
     # High scattering ratio means system is all scattering
     # Low means fully absorbing
     scattering_ratio = 0.5
 
-    source_total_xs = [0.1, 0.2]
+    source_total_xs = [0.1, 0.1]
     source_mat_data = openmc.XSdata('source', groups)
     source_mat_data.order = 0
     source_mat_data.set_total([0.1, 0.2])
@@ -43,15 +43,15 @@ def create_random_ray_model():
     #source_scatter_matrix = source_scatter_matrix.reshape((2, 2, 1))  # Reshape to (2, 2, 1)
     #source_mat_data.set_scatter_matrix(source_scatter_matrix)
 
-    void_total_xs = [1.0e-4, 2.0e-4]  # Example total cross-sections for two energy groups
+    void_total_xs = [1.0e-4, 1.0e-4]  # Example total cross-sections for two energy groups
     void_mat_data = openmc.XSdata('void', groups)
     void_mat_data.order = 0
-    void_mat_data.set_total([1.0e-4, 2.0e-4])
+    void_mat_data.set_total([1.0e-4, 1.0e-4])
     #void_mat_data.set_absorption([xs * (1.0 - scattering_ratio) for xs in void_total_xs])
-    void_mat_data.set_absorption([0.5e-4, 1.0e-4])
+    void_mat_data.set_absorption([0.5e-4, 0.5e-4])
     void_scatter_matrix = \
             [[[4.5e-5, 5.0e-6],
-               [0.0, 1.0e-4]]]
+               [0.0, 0.5e-4]]]
     void_scatter_matrix = np.array(void_scatter_matrix)
     void_scatter_matrix = np.rollaxis(void_scatter_matrix,0,3)
     void_mat_data.set_scatter_matrix(void_scatter_matrix)
@@ -295,8 +295,8 @@ def create_random_ray_model():
     
     # Create the neutron source in the bottom right of the moderator
     strengths = [0.25, 0.75] # Good - fast group appears largest (besides most thermal)
-    midpoints = [0.5, 10.0e6]
-    energy_dist = openmc.stats.Discrete(x=midpoints,p=strengths)
+    energy_points = [1.0e-2, 1.0e1]
+    energy_dist = openmc.stats.Discrete(x=energy_points,p=strengths)
     #point_source_location = openmc.stats.Point((5.0, 5.0, 5.0))
     #source = openmc.IndependentSource(energy=energy_dist, space=point_source_location, strength=1.0) # base source material
     #source 1 - base

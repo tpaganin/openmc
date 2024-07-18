@@ -132,10 +132,10 @@ int verbosity {7};
 double weight_cutoff {0.25};
 double weight_survive {1.0};
   // HARDCODED INPUTS - First Collided Flux
-float ray_threshold {1e-12f};
-bool FIRST_COLLIDED_FLUX {true};
+float ray_threshold {1e-20f};
+bool FIRST_COLLIDED_FLUX {false};
 bool uncollided_flux_volume {false};
-int n_uncollided_rays {200000};
+int n_uncollided_rays {10000};
 int n_volume_estimator_rays {10000};
 bool first_collided_mode {false};
 
