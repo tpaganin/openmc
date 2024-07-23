@@ -275,7 +275,8 @@ void RandomRaySimulation::simulate()
 
   // Print volume estimation simulation time
   double end_volume_estimation = omp_get_wtime();
-  fmt::print("Volume estimation completed. Run time = {:.4f} \n\n", end_volume_estimation-start_volume_estimation);
+  fmt::print("Volume estimation completed.\n");
+  fmt::print("Run time = {:.4f} \n\n", end_volume_estimation-start_volume_estimation);
 
   // Reset parameters for First Collided Method
   settings::uncollided_flux_volume = {false};
@@ -288,6 +289,12 @@ void RandomRaySimulation::simulate()
     // (3) Hit 100% of the FSRs
     fmt::print("  Batch    Rays         Total Source Regions Discovered\n"
              "  ======   ==========   ================================\n");
+
+    // SET-UP for user input n_uncollided_rays
+    if (user_input_rays == true){
+      new_n_rays = n_rays_max;
+    }
+    
     while(domain_.new_fsr_fc){
       
       // loop will end if no new cell was hit
@@ -319,7 +326,7 @@ void RandomRaySimulation::simulate()
 
     // BREAK STATEMENT if Max rays reached or 100% FSR HIT
     old_n_rays = new_n_rays;
-    if (new_n_rays >= 1e7) {
+    if (new_n_rays >= n_rays_max) {
       //Uncollided rays limit achieved
       break;
     } else if (fsr_ratio == 1.0){

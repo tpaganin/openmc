@@ -36,6 +36,8 @@ public:
   int old_n_rays {0};
   double fsr_ratio {0.0};
   int batch_first_collided {1};
+  int n_rays_max {1000000};
+  bool user_input_rays {false};
 
   //bool uncollided_flux_volume_ {false};
 
