@@ -253,15 +253,12 @@ void RandomRaySimulation::simulate()
     domain_.count_fixed_source_regions();
     } else {
     // FIRST_COLLIDED_FLUX calculation routine:
-    fmt::print("FIRST COLLIDED FLUX IS ACTIVE \n");
-
-    double start_volume_estimation = omp_get_wtime();
-
-    // Make sure batch reset
-    domain_.batch_reset();
+    fmt::print("==============>     FIRST COLLIDED SOURCE CONVERSION     <=================\n\n");
     
+    //==============================================================================
     // Turn on volume pre calculation
-    fmt::print("Volume estimation \n");
+    double start_volume_estimation = omp_get_wtime();
+    fmt::print("Computing starting volume estimates... \n");
     settings::uncollided_flux_volume = {true};
 
     // Pre calculate volume
@@ -273,17 +270,26 @@ void RandomRaySimulation::simulate()
         ray.transport_history_based_single_ray();
     }
 
-  double end_volume_estimation = omp_get_wtime();
-  settings::uncollided_flux_volume = {false};
-
   // Normalizing the scalar_new_flux and volumes
   domain_.normalize_scalar_flux_and_volumes(settings::n_volume_estimator_rays * RandomRay::distance_active_);
-  domain_.reset_hit();
-  fmt::print("Volume estimation run time = {:.4f} \n", end_volume_estimation-start_volume_estimation);
-  fmt::print("First Collided Method \n");
 
-    //while(fsr_ratio <= 0.99999){
+  // Print volume estimation simulation time
+  double end_volume_estimation = omp_get_wtime();
+  fmt::print("Volume estimation completed. Run time = {:.4f} \n\n", end_volume_estimation-start_volume_estimation);
+
+  // Reset parameters for First Collided Method
+  settings::uncollided_flux_volume = {false};
+  domain_.reset_hit();
+  //==============================================================================
+    // First Collided Transport Loop
+    // It will operate until (1-3):
+    // (1) There is no new FSR hits from one (n-1) iteration to the next (n)
+    // (2) Reached pre-set maximum n_uncollided_rays 
+    // (3) Hit 100% of the FSRs
+    fmt::print("  Batch    Rays         Total Source Regions Discovered\n"
+             "  ======   ==========   ================================\n");
     while(domain_.new_fsr_fc){
+      
       // loop will end if no new cell was hit
       domain_.new_fsr_fc = {false};
     // Transport sweep over all random rays for the iteration
@@ -308,30 +314,36 @@ void RandomRaySimulation::simulate()
     n_u_hits = n_hits;
     fsr_ratio = static_cast<double>(n_u_hits) / domain_.n_source_regions_;
 
+    // print results
+    fmt::print("  {:6}   {:10}   {:}\n", batch_first_collided, new_n_rays, n_u_hits);
+
     // BREAK STATEMENT if Max rays reached or 100% FSR HIT
     old_n_rays = new_n_rays;
     if (new_n_rays >= 1e7) {
-      fmt::print("Uncollided rays limit achieved \n", new_n_rays);
+      //Uncollided rays limit achieved
       break;
     } else if (fsr_ratio == 1.0){
-      fmt::print("All FSRs hit \n");
+      //All FSRs hit;
       break;
     }
-    //fmt::print("number of uncollided rays = {:} \n", old_n_rays);
+    
+    //update for next batch
     new_n_rays *= 2;
+    batch_first_collided++;
     }
 
     // Count fixed source regions
     domain_.count_fixed_source_regions();
 
-    // reset values from RandomRay iteration
+    // reset values for RandomRay iteration
     settings::first_collided_mode = {true}; //keep that for adding uncollided flux at the end
     settings::FIRST_COLLIDED_FLUX = {false}; //move to regular fixed source RR
     simulation::current_batch = 0; //garantee the first batch will be 1 in RR
-    fmt::print("number of uncollided rays = {:} \n", old_n_rays);
-    fmt::print("FSR hit ratio = {:}\n", fsr_ratio);
+
+    // compute First Collided Method simulation time
     double first_collided_estimated_time = omp_get_wtime();
-    fmt::print("First Collided Method run time = {:.4f} \n", first_collided_estimated_time-end_volume_estimation);
+    fmt::print("  ======   ==========   ================================\n\n");
+    fmt::print("First Collided Method run time = {:.4f} \n\n", first_collided_estimated_time-end_volume_estimation);
     }
   }
   
@@ -470,6 +482,9 @@ void RandomRaySimulation::instability_check(
     fatal_error("Instability detected");
   }
 }
+
+// Print 
+
 
 // Print random ray simulation results
 void RandomRaySimulation::print_results_random_ray(
