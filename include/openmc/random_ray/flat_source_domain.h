@@ -134,7 +134,9 @@ public:
   int64_t n_fixed_source_regions_ {0}; // Total number of source regions with
                                        // non-zero fixed source terms
 
-  double total_source_intensity {1.0};
+
+
+  bool new_fsr_fc {true};
 
   // 1D array representing source region starting offset for each OpenMC Cell
   // in model::cells

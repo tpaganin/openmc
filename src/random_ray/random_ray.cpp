@@ -278,6 +278,8 @@ void RandomRay::attenuate_flux(double distance, bool is_active)
     // indicate that it now has
     if (domain_->was_hit_[source_region] == 0) {
       domain_->was_hit_[source_region] = 1;
+      // add a criteria that keeps the 
+      domain_->new_fsr_fc = {true};
     }
 
     // Accomulate volume (ray distance) into this iteration's estimate

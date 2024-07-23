@@ -30,7 +30,12 @@ public:
   //----------------------------------------------------------------------------
   // Data members
   // First_collided_flux_marker for the uncollided flux addition
-  
+  // FSR tracker for FC method
+  int64_t n_u_hits {0};
+  int new_n_rays  {settings::n_uncollided_rays};
+  int old_n_rays {0};
+  double fsr_ratio {0.0};
+
   //bool uncollided_flux_volume_ {false};
 
 private:
@@ -49,10 +54,6 @@ private:
 
   // Number of energy groups
   int negroups_;
-
-  // FSR tracker for FC method
-  //int64_t n_u_hits {0};
-
 
 }; // class RandomRaySimulation
 

@@ -259,8 +259,7 @@ void RandomRaySimulation::simulate()
 
     // Make sure batch reset
     domain_.batch_reset();
-    int64_t n_u_hits = 0;
-
+    
     // Turn on volume pre calculation
     fmt::print("Volume estimation \n");
     settings::uncollided_flux_volume = {true};
@@ -282,13 +281,11 @@ void RandomRaySimulation::simulate()
   domain_.reset_hit();
   fmt::print("Volume estimation run time = {:.4f} \n", end_volume_estimation-start_volume_estimation);
   fmt::print("First Collided Method \n");
-  
-    double fsr_ratio = 0.0;
-    int new_n_rays = settings::n_uncollided_rays;
-    int old_n_rays = 0;
 
-    while(fsr_ratio <= 0.99999){
-    int64_t n_u_hits = 0;
+    //while(fsr_ratio <= 0.99999){
+    while(domain_.new_fsr_fc){
+      // loop will end if no new cell was hit
+      domain_.new_fsr_fc = {false};
     // Transport sweep over all random rays for the iteration
 #pragma omp parallel for schedule(dynamic)                                     \
   reduction(+ : total_geometric_intersections_)
@@ -309,17 +306,18 @@ void RandomRaySimulation::simulate()
     
     // save number of hit FSR
     n_u_hits = n_hits;
-     
-
     fsr_ratio = static_cast<double>(n_u_hits) / domain_.n_source_regions_;
-    //fmt::print("number of FSR hits ratio = {:} \n", fsr_ratio);
-    //fmt::print("number of uncollided rays = {:} \n", new_n_rays);
-    // BREAK STATEMENT IN CASE IT DOESNT CONVERGE TO 1
+
+    // BREAK STATEMENT if Max rays reached or 100% FSR HIT
+    old_n_rays = new_n_rays;
     if (new_n_rays >= 1e7) {
-      fmt::print("Uncollided rays limit achieved", new_n_rays);
+      fmt::print("Uncollided rays limit achieved \n", new_n_rays);
+      break;
+    } else if (fsr_ratio == 1.0){
+      fmt::print("All FSRs hit \n");
       break;
     }
-    old_n_rays = new_n_rays;
+    //fmt::print("number of uncollided rays = {:} \n", old_n_rays);
     new_n_rays *= 2;
     }
 
@@ -331,6 +329,7 @@ void RandomRaySimulation::simulate()
     settings::FIRST_COLLIDED_FLUX = {false}; //move to regular fixed source RR
     simulation::current_batch = 0; //garantee the first batch will be 1 in RR
     fmt::print("number of uncollided rays = {:} \n", old_n_rays);
+    fmt::print("FSR hit ratio = {:}\n", fsr_ratio);
     double first_collided_estimated_time = omp_get_wtime();
     fmt::print("First Collided Method run time = {:.4f} \n", first_collided_estimated_time-end_volume_estimation);
     }
